@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { initializeApp } from 'firebase/app';
-import { getAuth, signInAnonymously, onAuthStateChanged } from 'firebase/auth';
+import { getAuth, signInWithCustomToken, signInAnonymously, onAuthStateChanged } from 'firebase/auth';
 import { getFirestore, collection, onSnapshot, doc, setDoc, deleteDoc } from 'firebase/firestore';
 
-// --- Firebase Initialization (您專屬的雲端設定) ---
+// --- Firebase Initialization ---
 const firebaseConfig = {
   apiKey: "AIzaSyCRCbbLWZJVmDlMgNYW8PvVOcRvYJDyaP8",
   authDomain: "mounjaro-system2.firebaseapp.com",
@@ -13,7 +13,6 @@ const firebaseConfig = {
   appId: "1:1033378209723:web:6d5506c3e6a40e8659ae9e"
 };
 
-// 啟動 Firebase
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
@@ -69,10 +68,113 @@ const UsersIcon = () => (
     <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>
   </svg>
 );
+const EyeIcon = () => (
+  <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-indigo-500">
+    <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/>
+  </svg>
+);
+const ChevronLeftIcon = () => (
+  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="m15 18-6-6 6-6"/>
+  </svg>
+);
 
 const PEN_OPTIONS = [2.5, 5, 7.5, 10, 12.5, 15]; 
 const COMMON_DOSES = [2.5, 3.0, 3.5, 4.0, 4.5, 5.0, 6.0, 7.0, 8.0, 9.0, 10]; 
 const STANDARD_TITRATION = [2.5, 5, 7.5, 10, 12.5, 15];
+
+// ==========================================
+// 💡 共用元件：趨勢圖表 (TrendChart)
+// ==========================================
+function TrendChart({ logs }) {
+  if (!logs || logs.length < 2) {
+    return (
+      <div className="flex flex-col items-center justify-center py-10 bg-slate-50 rounded-xl border border-dashed border-slate-200">
+        <span className="text-2xl mb-2">📊</span>
+        <p className="text-sm text-slate-400">目前紀錄不足，新增至少 2 筆資料即可產生趨勢圖表</p>
+      </div>
+    );
+  }
+
+  // 將資料按日期從舊到新排序，方便畫圖 (由左至右)
+  const chartData = [...logs].sort((a, b) => new Date(a.date) - new Date(b.date));
+
+  // 計算體重與劑量的最大/最小值，用來做圖表比例尺
+  const weights = chartData.map(d => d.weight);
+  const doses = chartData.map(d => d.dose);
+  const maxWeight = Math.max(...weights) + 1;
+  const minWeight = Math.min(...weights) - 1;
+  const maxDose = Math.max(...doses) + 1;
+  const minDose = 0; // 劑量從 0 開始畫比較直覺
+
+  const rangeW = maxWeight - minWeight === 0 ? 10 : maxWeight - minWeight;
+  const rangeD = maxDose - minDose === 0 ? 5 : maxDose - minDose;
+
+  // SVG 畫布設定
+  const svgW = 600; const svgH = 220;
+  const padX = 40; const padY = 30;
+  const innerW = svgW - padX * 2;
+  const innerH = svgH - padY * 2;
+
+  // 比例換算函式
+  const getX = (idx) => padX + (idx / (chartData.length - 1)) * innerW;
+  const getYW = (val) => svgH - padY - ((val - minWeight) / rangeW) * innerH;
+  const getYD = (val) => svgH - padY - ((val - minDose) / rangeD) * innerH;
+
+  // 產生多邊形線條屬性
+  const weightPoints = chartData.map((d, i) => `${getX(i)},${getYW(d.weight)}`).join(' ');
+  const dosePoints = chartData.map((d, i) => `${getX(i)},${getYD(d.dose)}`).join(' ');
+
+  return (
+    <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+      <div className="flex justify-between items-center mb-4 px-2">
+        <h3 className="font-bold text-slate-700 text-sm">體重與劑量趨勢</h3>
+        <div className="flex gap-4 text-xs font-medium">
+          <div className="flex items-center"><span className="w-3 h-3 rounded-full bg-blue-500 mr-1.5"></span>體重 (kg)</div>
+          <div className="flex items-center"><span className="w-3 h-3 rounded-full bg-emerald-400 mr-1.5"></span>劑量 (mg)</div>
+        </div>
+      </div>
+      
+      {/* 讓圖表在手機上可以滑動 */}
+      <div className="overflow-x-auto hide-scrollbar">
+        <div style={{ minWidth: `${Math.max(chartData.length * 50, 400)}px` }}>
+          <svg viewBox={`0 0 ${svgW} ${svgH}`} className="w-full h-auto drop-shadow-sm">
+            {/* 畫背景輔助線 */}
+            <line x1={padX} y1={padY} x2={svgW-padX} y2={padY} stroke="#f1f5f9" strokeWidth="1" />
+            <line x1={padX} y1={svgH/2} x2={svgW-padX} y2={svgH/2} stroke="#f1f5f9" strokeWidth="1" />
+            <line x1={padX} y1={svgH-padY} x2={svgW-padX} y2={svgH-padY} stroke="#e2e8f0" strokeWidth="2" />
+
+            {/* 畫劑量線 (綠色) */}
+            <polyline points={dosePoints} fill="none" stroke="#34d399" strokeWidth="3" strokeLinejoin="round" />
+            {/* 畫體重線 (藍色) */}
+            <polyline points={weightPoints} fill="none" stroke="#3b82f6" strokeWidth="3" strokeLinejoin="round" />
+
+            {/* 畫資料點與標籤 */}
+            {chartData.map((d, i) => {
+              const x = getX(i); const yw = getYW(d.weight); const yd = getYD(d.dose);
+              // 日期格式化 MM/DD
+              const dateStr = d.date.substring(5).replace('-', '/');
+              return (
+                <g key={i}>
+                  {/* 綠點 (劑量) */}
+                  <circle cx={x} cy={yd} r="4" fill="#10b981" stroke="white" strokeWidth="2"><title>{`日期: ${d.date}\n劑量: ${d.dose} mg`}</title></circle>
+                  <text x={x} y={yd - 10} fontSize="10" fill="#059669" textAnchor="middle" fontWeight="bold">{d.dose}</text>
+                  
+                  {/* 藍點 (體重) */}
+                  <circle cx={x} cy={yw} r="5" fill="#2563eb" stroke="white" strokeWidth="2"><title>{`日期: ${d.date}\n體重: ${d.weight} kg`}</title></circle>
+                  <text x={x} y={yw - 12} fontSize="11" fill="#1d4ed8" textAnchor="middle" fontWeight="bold">{d.weight}</text>
+                  
+                  {/* X軸日期 */}
+                  <text x={x} y={svgH - 10} fontSize="10" fill="#64748b" textAnchor="middle">{dateStr}</text>
+                </g>
+              );
+            })}
+          </svg>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 // ==========================================
 // 1. 計算機元件 (CalculatorView)
@@ -216,7 +318,6 @@ function ScheduleView({ appUser }) {
   const [editDate, setEditDate] = useState('');
   const [editDose, setEditDose] = useState('');
 
-  // 讀取個人的計畫設定
   useEffect(() => {
     if (appUser) {
       const saved = localStorage.getItem(`schedule_${appUser.username}`);
@@ -393,7 +494,6 @@ function LogView({ appUser, allLogs }) {
 
     setIsSubmitting(true);
     try {
-      // ✅ 寫入您的 Firebase 根目錄 collection: mounjaroLogs
       const logRef = doc(collection(db, 'mounjaroLogs'));
       await setDoc(logRef, {
         username: appUser.username,
@@ -407,7 +507,6 @@ function LogView({ appUser, allLogs }) {
       setNotes('');
     } catch (error) {
       console.error("寫入紀錄失敗:", error);
-      alert("寫入失敗，請確認您的 Firebase 規則是否已設為 test mode (允許讀寫)");
     }
     setIsSubmitting(false);
   };
@@ -415,7 +514,6 @@ function LogView({ appUser, allLogs }) {
   const handleDelete = async (id) => {
     if (!db) return;
     try {
-      // ✅ 刪除對應的資料
       await deleteDoc(doc(db, 'mounjaroLogs', id));
     } catch (error) {
       console.error("刪除紀錄失敗:", error);
@@ -424,6 +522,9 @@ function LogView({ appUser, allLogs }) {
 
   return (
     <div className="space-y-6 animation-fade-in">
+      {/* 📊 新增的趨勢圖表區塊 */}
+      <TrendChart logs={myLogs} />
+
       <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 sm:p-6">
         <h2 className="text-lg font-semibold text-slate-800 mb-4 flex items-center">
           <BookIcon /> <span className="ml-2">新增施打紀錄 (雲端同步)</span>
@@ -509,6 +610,9 @@ function AdminView({ usersList, allLogs }) {
   const [newPassword, setNewPassword] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
+  
+  // 🕵️ 管理員透視：紀錄選中的使用者
+  const [selectedUser, setSelectedUser] = useState(null);
 
   const handleCreateUser = async (e) => {
     e.preventDefault();
@@ -521,7 +625,6 @@ function AdminView({ usersList, allLogs }) {
     }
 
     try {
-      // ✅ 寫入您的 Firebase 根目錄 collection: mounjaroUsers
       const userRef = doc(collection(db, 'mounjaroUsers'));
       await setDoc(userRef, {
         username: newUsername,
@@ -533,10 +636,66 @@ function AdminView({ usersList, allLogs }) {
       setNewUsername('');
       setNewPassword('');
     } catch (err) {
-      setErrorMsg('建立失敗，請確認 Firebase 規則是否有開通寫入權限。');
+      setErrorMsg('建立失敗，請稍後再試。');
     }
   };
 
+  // 如果管理員點擊了某個使用者，顯示專屬檔案畫面
+  if (selectedUser) {
+    const targetUserLogs = allLogs.filter(log => log.username === selectedUser.username);
+    return (
+      <div className="space-y-6 animation-fade-in">
+        <div className="flex items-center gap-3 mb-2">
+          <button onClick={() => setSelectedUser(null)} className="p-2 bg-white rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-indigo-600 shadow-sm transition-colors flex items-center">
+            <ChevronLeftIcon /> 返回列表
+          </button>
+          <h2 className="text-xl font-bold text-slate-800">
+            使用者 <span className="text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-md">{selectedUser.username}</span> 的詳細檔案
+          </h2>
+        </div>
+
+        <TrendChart logs={targetUserLogs} />
+
+        <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 sm:p-6">
+          <h3 className="font-semibold text-slate-800 mb-4">歷史紀錄清單</h3>
+          {targetUserLogs.length === 0 ? (
+            <p className="text-sm text-slate-400">此使用者尚無任何紀錄。</p>
+          ) : (
+            <div className="space-y-3">
+              {targetUserLogs.map((log, index) => {
+                let weightDiff = null;
+                if (index < targetUserLogs.length - 1) {
+                  const prevWeight = targetUserLogs[index + 1].weight;
+                  weightDiff = (log.weight - prevWeight).toFixed(1);
+                }
+                return (
+                  <div key={log.id} className="bg-slate-50 border border-slate-100 p-4 rounded-xl">
+                    <div className="flex flex-wrap justify-between items-start gap-2">
+                      <div>
+                        <div className="text-sm font-semibold text-slate-700 mb-1">{log.date}</div>
+                        <div className="flex gap-2">
+                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-800">💉 {log.dose} mg</span>
+                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">⚖️ {log.weight} kg</span>
+                          {weightDiff !== null && (
+                            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${weightDiff > 0 ? 'bg-red-50 text-red-600' : 'bg-green-50 text-green-600'}`}>
+                              {weightDiff > 0 ? '↑' : '↓'} {Math.abs(weightDiff)} kg
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                    {log.notes && <div className="mt-3 text-sm text-slate-600 bg-white border border-slate-100 p-3 rounded-lg">{log.notes}</div>}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // 預設管理員總覽畫面
   return (
     <div className="space-y-6 animation-fade-in">
       <div className="bg-indigo-50 border border-indigo-200 rounded-2xl p-5 sm:p-6 shadow-sm">
@@ -554,29 +713,37 @@ function AdminView({ usersList, allLogs }) {
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 sm:p-6">
-          <h3 className="font-semibold text-slate-800 mb-4">現有使用者列表</h3>
+          <h3 className="font-semibold text-slate-800 mb-4">現有使用者列表 <span className="text-xs font-normal text-slate-400 ml-2">(點擊查看詳情)</span></h3>
           <ul className="space-y-2">
             {usersList.map(u => (
-              <li key={u.id} className="flex justify-between items-center bg-slate-50 p-3 rounded-lg border border-slate-100">
-                <span className="font-medium text-slate-700">{u.username} <span className="text-xs text-slate-400 font-normal ml-1">({u.role})</span></span>
-                <span className="text-xs text-slate-500">密碼: {u.password}</span>
+              <li 
+                key={u.id} 
+                onClick={() => setSelectedUser(u)}
+                className="group flex justify-between items-center bg-slate-50 p-3 rounded-lg border border-slate-100 cursor-pointer hover:bg-indigo-50 hover:border-indigo-200 transition-all"
+                title={`查看 ${u.username} 的詳細紀錄`}
+              >
+                <span className="font-medium text-slate-700 group-hover:text-indigo-700">{u.username} <span className="text-xs text-slate-400 font-normal ml-1">({u.role})</span></span>
+                <div className="flex items-center gap-3">
+                  <span className="text-xs text-slate-400">密碼: {u.password}</span>
+                  <span className="text-slate-300 group-hover:text-indigo-500 transition-colors"><EyeIcon /></span>
+                </div>
               </li>
             ))}
           </ul>
         </div>
         <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 sm:p-6">
           <h3 className="font-semibold text-slate-800 mb-4">全體數據總覽 (最新50筆)</h3>
-          <div className="space-y-3 max-h-96 overflow-y-auto pr-2">
+          <div className="space-y-3 max-h-96 overflow-y-auto pr-2 hide-scrollbar">
             {allLogs.slice(0, 50).map(log => (
-              <div key={log.id} className="bg-slate-50 p-3 rounded-lg border border-slate-100 text-sm">
-                <div className="flex justify-between mb-1">
-                  <span className="font-bold text-indigo-600">{log.username}</span>
-                  <span className="text-slate-500">{log.date}</span>
+              <div key={log.id} className="bg-slate-50 p-3 rounded-lg border border-slate-100 text-sm flex justify-between items-center">
+                <div>
+                  <div className="font-bold text-indigo-600 mb-1">{log.username}</div>
+                  <div className="flex gap-2 text-xs font-medium">
+                    <span className="bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded">💉 {log.dose}</span>
+                    <span className="bg-blue-100 text-blue-800 px-2 py-0.5 rounded">⚖️ {log.weight}</span>
+                  </div>
                 </div>
-                <div className="flex gap-3 text-slate-700">
-                  <span>💉 {log.dose}mg</span>
-                  <span>⚖️ {log.weight}kg</span>
-                </div>
+                <span className="text-slate-400 text-xs">{log.date}</span>
               </div>
             ))}
             {allLogs.length === 0 && <p className="text-sm text-slate-400">目前尚無任何紀錄</p>}
@@ -602,7 +769,6 @@ export default function MounjaroApp() {
   const [loginPass, setLoginPass] = useState('');
   const [loginError, setLoginError] = useState('');
 
-  // 1. 匿名登入 (連線至您的專屬專案)
   useEffect(() => {
     if (!auth) return;
     const initAuth = async () => {
@@ -617,7 +783,6 @@ export default function MounjaroApp() {
     return () => unsubscribe();
   }, []);
 
-  // 2. 監聽您的資料庫集合
   useEffect(() => {
     if (!firebaseUser || !db) return;
 
@@ -625,14 +790,14 @@ export default function MounjaroApp() {
     const unsubUsers = onSnapshot(usersRef, (snapshot) => {
       const users = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       setUsersList(users);
-    }, err => console.error("Fetch users error (請確認 Firestore 規則):", err));
+    }, err => console.error("Fetch users error:", err));
 
     const logsRef = collection(db, 'mounjaroLogs');
     const unsubLogs = onSnapshot(logsRef, (snapshot) => {
       const logs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       logs.sort((a, b) => new Date(b.date) - new Date(a.date));
       setAllLogs(logs);
-    }, err => console.error("Fetch logs error (請確認 Firestore 規則):", err));
+    }, err => console.error("Fetch logs error:", err));
 
     return () => {
       unsubUsers();
@@ -644,14 +809,13 @@ export default function MounjaroApp() {
     e.preventDefault();
     setLoginError('');
 
-    // 如果您的資料庫目前是空的，自動幫您建立第一組管理員帳號
     if (usersList.length === 0 && loginUser === 'admin' && loginPass === 'admin123') {
       try {
         const adminRef = doc(collection(db, 'mounjaroUsers'));
         await setDoc(adminRef, { username: 'admin', password: 'admin123', role: 'admin' });
         setAppUser({ username: 'admin', role: 'admin' });
       } catch (err) {
-        setLoginError('無法初始化管理員帳號，請確認您的 Firebase Database 規則已設為 test mode。');
+        setLoginError('無法初始化管理員帳號，請確認連線。');
       }
       return;
     }
@@ -671,7 +835,6 @@ export default function MounjaroApp() {
     setActiveTab('calculator');
   };
 
-  // --- 登入畫面 ---
   if (!appUser) {
     return (
       <div className="min-h-screen bg-slate-100 flex items-center justify-center p-4 font-sans text-slate-800">
@@ -681,7 +844,7 @@ export default function MounjaroApp() {
               <SyringeIcon />
             </div>
             <h1 className="text-2xl font-bold text-slate-900">猛健樂管理系統</h1>
-            <p className="text-slate-500 text-sm mt-2">已成功連線至您的雲端資料庫</p>
+            <p className="text-slate-500 text-sm mt-2">請登入您的專屬帳號以存取數據</p>
           </div>
 
           <form onSubmit={handleLogin} className="space-y-5">
@@ -703,24 +866,24 @@ export default function MounjaroApp() {
           </form>
 
           <div className="mt-6 text-center text-xs text-slate-400">
-            {usersList.length === 0 && <p>💡 您的資料庫目前是空的！<br/>請使用預設管理員登入：<br/>帳號 <strong>admin</strong> / 密碼 <strong>admin123</strong></p>}
+            {usersList.length === 0 && <p>💡 系統初次啟動，請使用預設管理員登入：<br/>帳號 <strong>admin</strong> / 密碼 <strong>admin123</strong></p>}
           </div>
         </div>
       </div>
     );
   }
 
-  // --- 主系統畫面 ---
   return (
     <div className="min-h-screen bg-slate-100 py-6 px-4 font-sans text-slate-800">
       <style>{`
         .animation-fade-in { animation: fadeIn 0.3s ease-in-out; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+        .hide-scrollbar::-webkit-scrollbar { display: none; }
+        .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
       `}</style>
       
       <div className="max-w-3xl mx-auto space-y-6">
         
-        {/* Header */}
         <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 flex flex-col sm:flex-row items-center justify-between space-y-4 sm:space-y-0 text-center sm:text-left">
           <div className="flex items-center space-x-4">
             <div className="bg-indigo-50 p-3 rounded-xl inline-flex"><SyringeIcon /></div>
@@ -734,7 +897,6 @@ export default function MounjaroApp() {
           </button>
         </div>
 
-        {/* Navigation Tabs */}
         <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-1 flex overflow-x-auto hide-scrollbar">
           <button onClick={() => setActiveTab('calculator')} className={`flex-1 whitespace-nowrap flex items-center justify-center py-3 px-4 text-sm font-medium rounded-lg transition-all ${activeTab === 'calculator' ? 'bg-indigo-50 text-indigo-700 shadow-sm' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-700'}`}>
             <span className="mr-2 hidden sm:inline"><SyringeIcon /></span> 劑量換算
@@ -752,19 +914,12 @@ export default function MounjaroApp() {
           )}
         </div>
 
-        {/* Content Area */}
         <div>
           {activeTab === 'calculator' && <CalculatorView />}
           {activeTab === 'schedule' && <ScheduleView appUser={appUser} />}
           {activeTab === 'log' && <LogView appUser={appUser} allLogs={allLogs} />}
           {activeTab === 'admin' && appUser.role === 'admin' && <AdminView usersList={usersList} allLogs={allLogs} />}
         </div>
-
-        {/* Footer */}
-        <div className="text-center text-xs text-slate-400 mt-8 mb-4">
-          已成功與專案: mounjaro-system2 連線。
-        </div>
-
       </div>
     </div>
   );
