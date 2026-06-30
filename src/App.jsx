@@ -376,8 +376,10 @@ function ScheduleView({ appUser, userSchedule }) {
   }, [appUser, userSchedule, hasLoadedPlan]);
 
   useEffect(() => {
-    if (!isCustomized) generateSchedule();
-  }, [startDate, startDose, isCustomized]);
+    // 必須先完成雲端／本機計畫還原，才能建立預設計畫。
+    // 否則重新整理時，預設值會在同一輪 effect 中蓋掉剛載入的微調內容。
+    if (hasLoadedPlan && !isCustomized) generateSchedule();
+  }, [startDate, startDose, isCustomized, hasLoadedPlan]);
 
   useEffect(() => {
     if (appUser && schedule.length > 0) {
