@@ -82,6 +82,7 @@ const ChevronLeftIcon = () => (
 const PEN_OPTIONS = [2.5, 5, 7.5, 10, 12.5, 15]; 
 const COMMON_DOSES = [2.5, 3.0, 3.5, 4.0, 4.5, 5.0, 6.0, 7.0, 8.0, 9.0, 10]; 
 const STANDARD_TITRATION = [2.5, 5, 7.5, 10, 12.5, 15];
+const SESSION_KEY = 'mounjaroRememberedUser';
 
 function TrendChart({ logs }) {
   // 資料少於2筆不畫圖
@@ -301,7 +302,7 @@ function CalculatorView() {
   );
 }
 
-function ScheduleView({ appUser }) {
+function ScheduleView({ appUser, userSchedule }) {
   const [startDate, setStartDate] = useState(new Date().toISOString().split('T')[0]);
   const [startDose, setStartDose] = useState(2.5);
   const [schedule, setSchedule] = useState([]);
@@ -309,25 +310,58 @@ function ScheduleView({ appUser }) {
   const [editingIndex, setEditingIndex] = useState(null);
   const [editDate, setEditDate] = useState('');
   const [editDose, setEditDose] = useState('');
+  const [lastSavedHash, setLastSavedHash] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveError, setSaveError] = useState('');
+
+  const serializePlan = (date, dose, items, customized) => JSON.stringify({
+    startDate: date,
+    startDose: Number(dose),
+    schedule: items.map(item => ({
+      week: item.week,
+      date: item.date instanceof Date ? item.date.toISOString() : new Date(item.date).toISOString(),
+      dose: Number(item.dose)
+    })),
+    isCustomized: Boolean(customized)
+  });
 
   useEffect(() => {
-    if (appUser) {
-      const saved = localStorage.getItem(`schedule_${appUser.username}`);
-      if (saved) {
-        try {
-          const parsed = JSON.parse(saved);
-          setStartDate(parsed.startDate);
-          setStartDose(parsed.startDose);
-          if (parsed.schedule) {
-            const restoredSchedule = parsed.schedule.map(item => ({...item, date: new Date(item.date)}));
-            setSchedule(restoredSchedule);
-            setIsCustomized(parsed.isCustomized);
-            return;
-          }
-        } catch(e){}
+    if (!appUser) return;
+
+    if (userSchedule?.schedule?.length) {
+      const restoredSchedule = userSchedule.schedule.map(item => ({
+        ...item,
+        date: item.date?.toDate ? item.date.toDate() : new Date(item.date)
+      }));
+      setStartDate(userSchedule.startDate);
+      setStartDose(Number(userSchedule.startDose));
+      setSchedule(restoredSchedule);
+      setIsCustomized(Boolean(userSchedule.isCustomized));
+      setLastSavedHash(serializePlan(
+        userSchedule.startDate,
+        userSchedule.startDose,
+        restoredSchedule,
+        userSchedule.isCustomized
+      ));
+      return;
+    }
+
+    const saved = localStorage.getItem(`schedule_${appUser.username}`);
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        setStartDate(parsed.startDate);
+        setStartDose(parsed.startDose);
+        if (parsed.schedule) {
+          const restoredSchedule = parsed.schedule.map(item => ({ ...item, date: new Date(item.date) }));
+          setSchedule(restoredSchedule);
+          setIsCustomized(Boolean(parsed.isCustomized));
+        }
+      } catch (error) {
+        console.error('Restore local schedule error:', error);
       }
     }
-  }, [appUser]);
+  }, [appUser, userSchedule]);
 
   useEffect(() => {
     if (!isCustomized) generateSchedule();
@@ -338,6 +372,11 @@ function ScheduleView({ appUser }) {
       localStorage.setItem(`schedule_${appUser.username}`, JSON.stringify({ startDate, startDose, schedule, isCustomized }));
     }
   }, [schedule, startDate, startDose, isCustomized, appUser]);
+
+  const currentPlanHash = schedule.length > 0
+    ? serializePlan(startDate, startDose, schedule, isCustomized)
+    : '';
+  const hasUnsavedChanges = Boolean(currentPlanHash && currentPlanHash !== lastSavedHash);
 
   const generateSchedule = () => {
     if (!startDate) return;
@@ -373,8 +412,56 @@ function ScheduleView({ appUser }) {
     setIsCustomized(true);
   };
 
+  const handleSaveToCloud = async () => {
+    if (!appUser || schedule.length === 0 || isSaving) return;
+    setIsSaving(true);
+    setSaveError('');
+
+    const normalizedSchedule = schedule.map(item => ({
+      week: item.week,
+      date: item.date instanceof Date ? item.date.toISOString() : new Date(item.date).toISOString(),
+      dose: Number(item.dose)
+    }));
+
+    try {
+      await setDoc(doc(db, 'mounjaroSchedules', appUser.username), {
+        username: appUser.username,
+        startDate,
+        startDose: Number(startDose),
+        schedule: normalizedSchedule,
+        isCustomized: Boolean(isCustomized),
+        updatedAt: new Date().toISOString()
+      });
+      setLastSavedHash(serializePlan(startDate, startDose, schedule, isCustomized));
+    } catch (error) {
+      console.error('Save schedule error:', error);
+      setSaveError('雲端儲存失敗，請確認網路後再試一次。');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   return (
     <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 sm:p-6 animation-fade-in">
+      <div className={`mb-5 rounded-xl border p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${hasUnsavedChanges ? 'bg-amber-50 border-amber-200' : 'bg-emerald-50 border-emerald-200'}`}>
+        <div>
+          <p className={`text-sm font-bold ${hasUnsavedChanges ? 'text-amber-800' : 'text-emerald-800'}`}>
+            {hasUnsavedChanges ? '計畫尚未儲存到雲端' : '計畫已儲存到雲端'}
+          </p>
+          <p className="text-xs text-slate-500 mt-1">
+            {hasUnsavedChanges ? '確認日期與劑量後，請按右側按鈕完成儲存。' : '下次登入或更換裝置時，會自動載入這份計畫。'}
+          </p>
+          {saveError && <p className="text-xs text-red-600 font-medium mt-2">{saveError}</p>}
+        </div>
+        <button
+          onClick={handleSaveToCloud}
+          disabled={!hasUnsavedChanges || isSaving}
+          className="shrink-0 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-bold rounded-lg shadow-sm transition-colors disabled:bg-slate-300 disabled:cursor-not-allowed flex items-center justify-center"
+        >
+          <CheckIcon />
+          <span className="ml-2">{isSaving ? '儲存中...' : hasUnsavedChanges ? '儲存計畫到雲端' : '已完成儲存'}</span>
+        </button>
+      </div>
       <div className="mb-4 flex flex-col sm:flex-row sm:items-end gap-4 bg-slate-50 p-4 rounded-xl relative">
         <div className="flex-1">
           <label className="block text-sm font-medium text-slate-600 mb-1">第一針施打日期</label>
@@ -746,6 +833,9 @@ export default function MounjaroApp() {
   const [appUser, setAppUser] = useState(null);
   const [usersList, setUsersList] = useState([]);
   const [allLogs, setAllLogs] = useState([]);
+  const [allSchedules, setAllSchedules] = useState([]);
+  const [usersLoaded, setUsersLoaded] = useState(false);
+  const [sessionChecked, setSessionChecked] = useState(false);
   
   const [activeTab, setActiveTab] = useState('calculator');
   const [loginUser, setLoginUser] = useState('');
@@ -773,7 +863,11 @@ export default function MounjaroApp() {
     const unsubUsers = onSnapshot(usersRef, (snapshot) => {
       const users = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       setUsersList(users);
-    }, err => console.error("Fetch users error:", err));
+      setUsersLoaded(true);
+    }, err => {
+      console.error("Fetch users error:", err);
+      setUsersLoaded(true);
+    });
 
     const logsRef = collection(db, 'mounjaroLogs');
     const unsubLogs = onSnapshot(logsRef, (snapshot) => {
@@ -782,11 +876,38 @@ export default function MounjaroApp() {
       setAllLogs(logs);
     }, err => console.error("Fetch logs error:", err));
 
+    const schedulesRef = collection(db, 'mounjaroSchedules');
+    const unsubSchedules = onSnapshot(schedulesRef, (snapshot) => {
+      const schedules = snapshot.docs.map(scheduleDoc => ({ id: scheduleDoc.id, ...scheduleDoc.data() }));
+      setAllSchedules(schedules);
+    }, err => console.error("Fetch schedules error:", err));
+
     return () => {
       unsubUsers();
       unsubLogs();
+      unsubSchedules();
     };
   }, [firebaseUser]);
+
+  useEffect(() => {
+    if (!firebaseUser || !usersLoaded || sessionChecked) return;
+
+    const rememberedUsername = localStorage.getItem(SESSION_KEY);
+    if (rememberedUsername) {
+      const rememberedUser = usersList.find(user => user.username === rememberedUsername);
+      if (rememberedUser) {
+        setAppUser({ username: rememberedUser.username, role: rememberedUser.role });
+      } else {
+        localStorage.removeItem(SESSION_KEY);
+      }
+    }
+    setSessionChecked(true);
+  }, [firebaseUser, usersLoaded, usersList, sessionChecked]);
+
+  const rememberUser = (user) => {
+    localStorage.setItem(SESSION_KEY, user.username);
+    setAppUser({ username: user.username, role: user.role });
+  };
 
   const handleLogin = async (e) => {
     e.preventDefault();
@@ -796,7 +917,7 @@ export default function MounjaroApp() {
       try {
         const adminRef = doc(collection(db, 'mounjaroUsers'));
         await setDoc(adminRef, { username: 'admin', password: 'admin123', role: 'admin' });
-        setAppUser({ username: 'admin', role: 'admin' });
+        rememberUser({ username: 'admin', role: 'admin' });
       } catch (err) {
         setLoginError('無法初始化管理員帳號，請確認連線。');
       }
@@ -805,18 +926,32 @@ export default function MounjaroApp() {
 
     const foundUser = usersList.find(u => u.username === loginUser && u.password === loginPass);
     if (foundUser) {
-      setAppUser({ username: foundUser.username, role: foundUser.role });
+      rememberUser(foundUser);
     } else {
       setLoginError('帳號或密碼錯誤！');
     }
   };
 
   const handleLogout = () => {
+    localStorage.removeItem(SESSION_KEY);
     setAppUser(null);
     setLoginUser('');
     setLoginPass('');
     setActiveTab('calculator');
+    setSessionChecked(true);
   };
+
+  if (!firebaseUser || !usersLoaded || !sessionChecked) {
+    return (
+      <div className="min-h-screen bg-slate-100 flex items-center justify-center p-4 font-sans text-slate-800">
+        <div className="bg-white rounded-2xl shadow-sm border border-slate-200 px-8 py-7 text-center">
+          <div className="w-10 h-10 border-4 border-indigo-100 border-t-indigo-600 rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="font-bold text-slate-700">正在恢復登入狀態...</p>
+          <p className="text-xs text-slate-400 mt-1">請稍候，正在連接雲端資料。</p>
+        </div>
+      </div>
+    );
+  }
 
   if (!appUser) {
     return (
@@ -899,7 +1034,12 @@ export default function MounjaroApp() {
 
         <div>
           {activeTab === 'calculator' && <CalculatorView />}
-          {activeTab === 'schedule' && <ScheduleView appUser={appUser} />}
+          {activeTab === 'schedule' && (
+            <ScheduleView
+              appUser={appUser}
+              userSchedule={allSchedules.find(item => item.id === appUser.username || item.username === appUser.username)}
+            />
+          )}
           {activeTab === 'log' && <LogView appUser={appUser} allLogs={allLogs} />}
           {activeTab === 'admin' && appUser.role === 'admin' && <AdminView usersList={usersList} allLogs={allLogs} />}
         </div>
