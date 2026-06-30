@@ -313,6 +313,7 @@ function ScheduleView({ appUser, userSchedule }) {
   const [lastSavedHash, setLastSavedHash] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState('');
+  const [hasLoadedPlan, setHasLoadedPlan] = useState(false);
 
   const serializePlan = (date, dose, items, customized) => JSON.stringify({
     startDate: date,
@@ -333,16 +334,26 @@ function ScheduleView({ appUser, userSchedule }) {
         ...item,
         date: item.date?.toDate ? item.date.toDate() : new Date(item.date)
       }));
-      setStartDate(userSchedule.startDate);
-      setStartDose(Number(userSchedule.startDose));
-      setSchedule(restoredSchedule);
-      setIsCustomized(Boolean(userSchedule.isCustomized));
-      setLastSavedHash(serializePlan(
+      const incomingHash = serializePlan(
         userSchedule.startDate,
         userSchedule.startDose,
         restoredSchedule,
         userSchedule.isCustomized
-      ));
+      );
+      const localHash = schedule.length > 0
+        ? serializePlan(startDate, startDose, schedule, isCustomized)
+        : '';
+
+      // 使用者正在編輯時，不讓其他即時快照覆蓋尚未同步的內容。
+      if (hasLoadedPlan && localHash && localHash !== lastSavedHash) return;
+      if (hasLoadedPlan && incomingHash === lastSavedHash) return;
+
+      setStartDate(userSchedule.startDate);
+      setStartDose(Number(userSchedule.startDose));
+      setSchedule(restoredSchedule);
+      setIsCustomized(Boolean(userSchedule.isCustomized));
+      setLastSavedHash(incomingHash);
+      setHasLoadedPlan(true);
       return;
     }
 
@@ -361,7 +372,8 @@ function ScheduleView({ appUser, userSchedule }) {
         console.error('Restore local schedule error:', error);
       }
     }
-  }, [appUser, userSchedule]);
+    setHasLoadedPlan(true);
+  }, [appUser, userSchedule, hasLoadedPlan]);
 
   useEffect(() => {
     if (!isCustomized) generateSchedule();
@@ -441,26 +453,37 @@ function ScheduleView({ appUser, userSchedule }) {
     }
   };
 
+  useEffect(() => {
+    if (!hasLoadedPlan || !hasUnsavedChanges || isSaving || saveError || schedule.length === 0) return;
+
+    const autoSaveTimer = setTimeout(() => {
+      handleSaveToCloud();
+    }, 800);
+
+    return () => clearTimeout(autoSaveTimer);
+  }, [currentPlanHash, hasLoadedPlan, hasUnsavedChanges, isSaving, lastSavedHash, saveError]);
+
   return (
     <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 sm:p-6 animation-fade-in">
-      <div className={`mb-5 rounded-xl border p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${hasUnsavedChanges ? 'bg-amber-50 border-amber-200' : 'bg-emerald-50 border-emerald-200'}`}>
+      <div className={`mb-5 rounded-xl border p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${saveError ? 'bg-red-50 border-red-200' : hasUnsavedChanges ? 'bg-amber-50 border-amber-200' : 'bg-emerald-50 border-emerald-200'}`}>
         <div>
-          <p className={`text-sm font-bold ${hasUnsavedChanges ? 'text-amber-800' : 'text-emerald-800'}`}>
-            {hasUnsavedChanges ? '計畫尚未儲存到雲端' : '計畫已儲存到雲端'}
+          <p className={`text-sm font-bold ${saveError ? 'text-red-700' : hasUnsavedChanges ? 'text-amber-800' : 'text-emerald-800'}`}>
+            {saveError ? '雲端同步失敗' : isSaving ? '正在自動儲存計畫...' : hasUnsavedChanges ? '偵測到調整，準備同步...' : '計畫已自動同步至雲端'}
           </p>
           <p className="text-xs text-slate-500 mt-1">
-            {hasUnsavedChanges ? '確認日期與劑量後，請按右側按鈕完成儲存。' : '下次登入或更換裝置時，會自動載入這份計畫。'}
+            {hasUnsavedChanges ? '停止調整後會自動儲存，不需要另外按按鈕。' : '每次調整日期或劑量後，系統都會自動更新雲端計畫。'}
           </p>
           {saveError && <p className="text-xs text-red-600 font-medium mt-2">{saveError}</p>}
         </div>
-        <button
-          onClick={handleSaveToCloud}
-          disabled={!hasUnsavedChanges || isSaving}
-          className="shrink-0 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-bold rounded-lg shadow-sm transition-colors disabled:bg-slate-300 disabled:cursor-not-allowed flex items-center justify-center"
-        >
-          <CheckIcon />
-          <span className="ml-2">{isSaving ? '儲存中...' : hasUnsavedChanges ? '儲存計畫到雲端' : '已完成儲存'}</span>
-        </button>
+        {saveError ? (
+          <button onClick={handleSaveToCloud} disabled={isSaving} className="shrink-0 px-4 py-2.5 bg-red-600 hover:bg-red-700 text-white text-sm font-bold rounded-lg shadow-sm transition-colors disabled:bg-slate-300 flex items-center justify-center">
+            <span>重新儲存</span>
+          </button>
+        ) : (
+          <span className={`shrink-0 inline-flex items-center px-3 py-2 rounded-lg text-xs font-bold ${hasUnsavedChanges ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'}`}>
+            <CheckIcon /><span className="ml-1.5">{hasUnsavedChanges ? '自動同步中' : '雲端已更新'}</span>
+          </span>
+        )}
       </div>
       <div className="mb-4 flex flex-col sm:flex-row sm:items-end gap-4 bg-slate-50 p-4 rounded-xl relative">
         <div className="flex-1">
@@ -678,7 +701,7 @@ function LogView({ appUser, allLogs }) {
   );
 }
 
-function AdminView({ usersList, allLogs }) {
+function AdminView({ usersList, allLogs, allSchedules }) {
   const [newUsername, setNewUsername] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
@@ -686,6 +709,7 @@ function AdminView({ usersList, allLogs }) {
   
   // 🕵️ 紀錄管理員目前選中了哪一個使用者來查看詳細資料
   const [selectedUser, setSelectedUser] = useState(null);
+  const [adminDetailTab, setAdminDetailTab] = useState('logs');
 
   const handleCreateUser = async (e) => {
     e.preventDefault();
@@ -716,10 +740,11 @@ function AdminView({ usersList, allLogs }) {
   // 如果點擊了某個使用者，顯示專屬詳細檔案與圖表
   if (selectedUser) {
     const targetUserLogs = allLogs.filter(log => log.username === selectedUser.username);
+    const targetUserSchedule = allSchedules.find(item => item.id === selectedUser.username || item.username === selectedUser.username);
     return (
       <div className="space-y-6 animation-fade-in">
         <div className="flex items-center gap-3 mb-2">
-          <button onClick={() => setSelectedUser(null)} className="p-2 bg-white rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-indigo-600 shadow-sm transition-colors flex items-center">
+          <button onClick={() => { setSelectedUser(null); setAdminDetailTab('logs'); }} className="p-2 bg-white rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-indigo-600 shadow-sm transition-colors flex items-center">
             <ChevronLeftIcon /> 返回列表
           </button>
           <h2 className="text-xl font-bold text-slate-800">
@@ -727,10 +752,31 @@ function AdminView({ usersList, allLogs }) {
           </h2>
         </div>
 
-        {/* 顯示該使用者的圖表 */}
-        <TrendChart logs={targetUserLogs} />
+        <div className="grid grid-cols-2 gap-3">
+          <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
+            <p className="text-xs text-slate-400 mb-1">施打紀錄</p>
+            <p className="text-2xl font-bold text-slate-800">{targetUserLogs.length} <span className="text-xs font-normal text-slate-400">筆</span></p>
+          </div>
+          <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
+            <p className="text-xs text-slate-400 mb-1">雲端計畫</p>
+            <p className={`text-sm font-bold mt-2 ${targetUserSchedule ? 'text-emerald-600' : 'text-slate-400'}`}>{targetUserSchedule ? '已建立並同步' : '尚未建立'}</p>
+          </div>
+        </div>
 
-        <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 sm:p-6">
+        <div className="flex bg-slate-200/70 rounded-xl p-1 gap-1">
+          <button onClick={() => setAdminDetailTab('logs')} className={`flex-1 py-2.5 rounded-lg text-sm font-bold transition-all ${adminDetailTab === 'logs' ? 'bg-white text-indigo-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
+            施打紀錄與體重
+          </button>
+          <button onClick={() => setAdminDetailTab('schedule')} className={`flex-1 py-2.5 rounded-lg text-sm font-bold transition-all ${adminDetailTab === 'schedule' ? 'bg-white text-indigo-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
+            擬定計畫與進度
+          </button>
+        </div>
+
+        {adminDetailTab === 'logs' && (
+          <div className="space-y-6 animation-fade-in">
+            <TrendChart logs={targetUserLogs} />
+
+            <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 sm:p-6">
           <h3 className="font-semibold text-slate-800 mb-4">歷史紀錄清單</h3>
           {targetUserLogs.length === 0 ? (
             <p className="text-sm text-slate-400">此使用者尚無任何紀錄。</p>
@@ -763,8 +809,52 @@ function AdminView({ usersList, allLogs }) {
                 );
               })}
             </div>
-          )}
-        </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {adminDetailTab === 'schedule' && (
+          <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 sm:p-6 animation-fade-in">
+            <div className="flex flex-wrap justify-between items-start gap-3 mb-5">
+              <div>
+                <h3 className="font-semibold text-slate-800">雲端療程計畫</h3>
+                <p className="text-xs text-slate-400 mt-1">對照預定日期與實際施打紀錄</p>
+              </div>
+              {targetUserSchedule?.updatedAt && (
+                <span className="text-xs text-slate-400 bg-slate-50 px-3 py-1.5 rounded-full">更新於 {new Date(targetUserSchedule.updatedAt).toLocaleString('zh-TW')}</span>
+              )}
+            </div>
+
+            {!targetUserSchedule?.schedule?.length ? (
+              <div className="text-center py-12 bg-slate-50 border border-dashed border-slate-200 rounded-xl text-sm text-slate-400">此使用者尚未將計畫同步到雲端。</div>
+            ) : (
+              <div className="space-y-2">
+                {targetUserSchedule.schedule.map(item => {
+                  const plannedDate = item.date?.toDate ? item.date.toDate() : new Date(item.date);
+                  const nearbyLog = targetUserLogs.find(log => {
+                    const actualDate = new Date(`${log.date}T12:00:00`);
+                    return Math.abs(actualDate.getTime() - plannedDate.getTime()) <= 3 * 24 * 60 * 60 * 1000;
+                  });
+                  const isPast = plannedDate.getTime() < Date.now();
+                  return (
+                    <div key={item.week} className="grid grid-cols-[54px_1fr_auto] sm:grid-cols-[70px_1fr_90px_130px] items-center gap-3 bg-slate-50 border border-slate-100 rounded-xl p-3">
+                      <span className="text-xs font-bold text-slate-500">第 {item.week} 週</span>
+                      <div>
+                        <p className="text-sm font-semibold text-slate-700">{plannedDate.toLocaleDateString('zh-TW')}</p>
+                        <p className="text-xs text-slate-400 sm:hidden">預計 {item.dose} mg</p>
+                      </div>
+                      <span className="hidden sm:block text-sm font-bold text-indigo-600">{item.dose} mg</span>
+                      <span className={`col-span-3 sm:col-span-1 justify-self-start sm:justify-self-end text-xs font-bold px-2.5 py-1 rounded-full ${nearbyLog ? 'bg-emerald-100 text-emerald-700' : isPast ? 'bg-amber-100 text-amber-700' : 'bg-slate-200 text-slate-500'}`}>
+                        {nearbyLog ? `已記錄 ${nearbyLog.dose} mg` : isPast ? '尚無施打紀錄' : '尚未到期'}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
       </div>
     );
   }
@@ -1041,7 +1131,7 @@ export default function MounjaroApp() {
             />
           )}
           {activeTab === 'log' && <LogView appUser={appUser} allLogs={allLogs} />}
-          {activeTab === 'admin' && appUser.role === 'admin' && <AdminView usersList={usersList} allLogs={allLogs} />}
+          {activeTab === 'admin' && appUser.role === 'admin' && <AdminView usersList={usersList} allLogs={allLogs} allSchedules={allSchedules} />}
         </div>
       </div>
     </div>
