@@ -586,6 +586,12 @@ function LogView({ appUser, allLogs }) {
   const [dose, setDose] = useState('2.5');
   const [notes, setNotes] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [editingLogId, setEditingLogId] = useState(null);
+  const [editDate, setEditDate] = useState('');
+  const [editWeight, setEditWeight] = useState('');
+  const [editDose, setEditDose] = useState('');
+  const [editNotes, setEditNotes] = useState('');
+  const [editError, setEditError] = useState('');
 
   const myLogs = allLogs.filter(log => log.username === appUser.username);
 
@@ -614,11 +620,52 @@ function LogView({ appUser, allLogs }) {
 
   const handleDelete = async (id) => {
     if (!db) return;
+    if (!window.confirm('確定要刪除這筆施打紀錄嗎？')) return;
     try {
       await deleteDoc(doc(db, 'mounjaroLogs', id));
     } catch (error) {
       console.error("刪除紀錄失敗:", error);
     }
+  };
+
+  const startEditLog = (log) => {
+    setEditingLogId(log.id);
+    setEditDate(log.date || '');
+    setEditWeight(String(log.weight ?? ''));
+    setEditDose(String(log.dose ?? ''));
+    setEditNotes(log.notes || '');
+    setEditError('');
+  };
+
+  const cancelEditLog = () => {
+    setEditingLogId(null);
+    setEditDate('');
+    setEditWeight('');
+    setEditDose('');
+    setEditNotes('');
+    setEditError('');
+  };
+
+  const handleUpdateLog = async (e) => {
+    e.preventDefault();
+    if (!editingLogId || !editDate || !editWeight || !editDose || !db || isSubmitting) return;
+
+    setIsSubmitting(true);
+    setEditError('');
+    try {
+      await setDoc(doc(db, 'mounjaroLogs', editingLogId), {
+        date: editDate,
+        weight: parseFloat(editWeight),
+        dose: parseFloat(editDose),
+        notes: editNotes,
+        updatedAt: new Date().toISOString()
+      }, { merge: true });
+      cancelEditLog();
+    } catch (error) {
+      console.error("更新紀錄失敗:", error);
+      setEditError('更新失敗，請稍後再試。');
+    }
+    setIsSubmitting(false);
   };
 
   return (
@@ -675,24 +722,65 @@ function LogView({ appUser, allLogs }) {
               }
               return (
                 <div key={log.id} className="relative group bg-white border border-slate-200 p-4 rounded-xl hover:border-indigo-300 transition-colors">
-                  <div className="flex flex-wrap justify-between items-start gap-2">
-                    <div>
-                      <div className="text-sm font-semibold text-slate-700 mb-1">{log.date}</div>
-                      <div className="flex gap-2">
-                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-800">💉 {log.dose} mg</span>
-                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">⚖️ {log.weight} kg</span>
-                        {weightDiff !== null && (
-                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${weightDiff > 0 ? 'bg-red-50 text-red-600' : 'bg-green-50 text-green-600'}`}>
-                            {weightDiff > 0 ? '↑' : '↓'} {Math.abs(weightDiff)} kg
-                          </span>
-                        )}
+                  {editingLogId === log.id ? (
+                    <form onSubmit={handleUpdateLog} className="space-y-4">
+                      <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                        <div>
+                          <label className="block text-xs font-medium text-slate-500 mb-1">日期</label>
+                          <input type="date" required value={editDate} onChange={e => setEditDate(e.target.value)}
+                            className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500" />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-slate-500 mb-1">體重 (kg)</label>
+                          <input type="number" step="0.1" required value={editWeight} onChange={e => setEditWeight(e.target.value)}
+                            className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500" />
+                        </div>
+                        <div className="col-span-2 md:col-span-1">
+                          <label className="block text-xs font-medium text-slate-500 mb-1">施打劑量 (mg)</label>
+                          <input type="number" step="0.1" required value={editDose} onChange={e => setEditDose(e.target.value)}
+                            className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500" />
+                        </div>
                       </div>
-                    </div>
-                    <button onClick={() => handleDelete(log.id)} className="p-2 text-slate-400 hover:text-red-500 transition-colors rounded-lg hover:bg-red-50">
-                      <TrashIcon />
-                    </button>
-                  </div>
-                  {log.notes && <div className="mt-3 text-sm text-slate-600 bg-slate-50 p-3 rounded-lg">{log.notes}</div>}
+                      <div>
+                        <label className="block text-xs font-medium text-slate-500 mb-1">副作用或感受筆記</label>
+                        <textarea value={editNotes} onChange={e => setEditNotes(e.target.value)} rows="2"
+                          className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 resize-none"></textarea>
+                      </div>
+                      {editError && <p className="text-sm text-red-500">{editError}</p>}
+                      <div className="flex justify-end gap-2">
+                        <button type="button" onClick={cancelEditLog} className="px-4 py-2 text-sm rounded-lg bg-slate-100 text-slate-600 hover:bg-slate-200">取消</button>
+                        <button type="submit" disabled={isSubmitting} className="px-4 py-2 text-sm rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 disabled:bg-slate-400">
+                          {isSubmitting ? '儲存中...' : '儲存修改'}
+                        </button>
+                      </div>
+                    </form>
+                  ) : (
+                    <>
+                      <div className="flex flex-wrap justify-between items-start gap-2">
+                        <div>
+                          <div className="text-sm font-semibold text-slate-700 mb-1">{log.date}</div>
+                          <div className="flex flex-wrap gap-2">
+                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-800">💉 {log.dose} mg</span>
+                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">⚖️ {log.weight} kg</span>
+                            {weightDiff !== null && (
+                              <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${weightDiff > 0 ? 'bg-red-50 text-red-600' : 'bg-green-50 text-green-600'}`}>
+                                {weightDiff > 0 ? '↑' : '↓'} {Math.abs(weightDiff)} kg
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                        <div className="flex gap-1">
+                          <button onClick={() => startEditLog(log)} className="px-3 py-2 text-xs font-medium text-indigo-600 hover:text-indigo-700 transition-colors rounded-lg hover:bg-indigo-50">
+                            修改
+                          </button>
+                          <button onClick={() => handleDelete(log.id)} className="p-2 text-slate-400 hover:text-red-500 transition-colors rounded-lg hover:bg-red-50">
+                            <TrashIcon />
+                          </button>
+                        </div>
+                      </div>
+                      {log.notes && <div className="mt-3 text-sm text-slate-600 bg-slate-50 p-3 rounded-lg">{log.notes}</div>}
+                    </>
+                  )}
                 </div>
               );
             })}
@@ -703,11 +791,12 @@ function LogView({ appUser, allLogs }) {
   );
 }
 
-function AdminView({ usersList, allLogs, allSchedules }) {
+function AdminView({ appUser, usersList, allLogs, allSchedules }) {
   const [newUsername, setNewUsername] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
+  const [isDeletingUser, setIsDeletingUser] = useState(false);
   
   // 🕵️ 紀錄管理員目前選中了哪一個使用者來查看詳細資料
   const [selectedUser, setSelectedUser] = useState(null);
@@ -737,6 +826,42 @@ function AdminView({ usersList, allLogs, allSchedules }) {
     } catch (err) {
       setErrorMsg('建立失敗，請稍後再試。');
     }
+  };
+
+  const handleDeleteUser = async (targetUser, event) => {
+    event.stopPropagation();
+    setErrorMsg('');
+    setSuccessMsg('');
+
+    if (!db || isDeletingUser) return;
+    if (targetUser.username === appUser.username) {
+      setErrorMsg('不能刪除目前登入中的管理者帳號。');
+      return;
+    }
+    if (targetUser.role === 'admin') {
+      setErrorMsg('為了安全，管理者帳號不開放在此刪除。');
+      return;
+    }
+    if (!window.confirm(`確定要刪除帳號「${targetUser.username}」嗎？該帳號的施打紀錄與雲端計畫也會一起刪除。`)) return;
+
+    setIsDeletingUser(true);
+    try {
+      const logsToDelete = allLogs.filter(log => log.username === targetUser.username);
+      await Promise.all([
+        deleteDoc(doc(db, 'mounjaroUsers', targetUser.id)),
+        deleteDoc(doc(db, 'mounjaroSchedules', targetUser.username)),
+        ...logsToDelete.map(log => deleteDoc(doc(db, 'mounjaroLogs', log.id)))
+      ]);
+      if (selectedUser?.username === targetUser.username) {
+        setSelectedUser(null);
+        setAdminDetailTab('logs');
+      }
+      setSuccessMsg(`已刪除帳號：${targetUser.username}`);
+    } catch (err) {
+      console.error('刪除使用者失敗:', err);
+      setErrorMsg('刪除失敗，請稍後再試。');
+    }
+    setIsDeletingUser(false);
   };
 
   // 如果點擊了某個使用者，顯示專屬詳細檔案與圖表
@@ -891,6 +1016,16 @@ function AdminView({ usersList, allLogs, allSchedules }) {
                 <span className="font-medium text-slate-700 group-hover:text-indigo-700">{u.username} <span className="text-xs text-slate-400 font-normal ml-1">({u.role})</span></span>
                 <div className="flex items-center gap-3">
                   <span className="text-xs text-slate-400">密碼: {u.password}</span>
+                  {u.username !== appUser.username && u.role !== 'admin' && (
+                    <button
+                      type="button"
+                      onClick={(event) => handleDeleteUser(u, event)}
+                      disabled={isDeletingUser}
+                      className="px-2.5 py-1 text-xs font-bold text-red-500 bg-red-50 hover:bg-red-100 rounded-lg transition-colors disabled:opacity-50"
+                    >
+                      刪除
+                    </button>
+                  )}
                   <span className="text-slate-300 group-hover:text-indigo-500 transition-colors"><EyeIcon /></span>
                 </div>
               </li>
@@ -1133,7 +1268,7 @@ export default function MounjaroApp() {
             />
           )}
           {activeTab === 'log' && <LogView appUser={appUser} allLogs={allLogs} />}
-          {activeTab === 'admin' && appUser.role === 'admin' && <AdminView usersList={usersList} allLogs={allLogs} allSchedules={allSchedules} />}
+          {activeTab === 'admin' && appUser.role === 'admin' && <AdminView appUser={appUser} usersList={usersList} allLogs={allLogs} allSchedules={allSchedules} />}
         </div>
       </div>
     </div>
