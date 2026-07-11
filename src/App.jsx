@@ -83,6 +83,33 @@ const PEN_OPTIONS = [2.5, 5, 7.5, 10, 12.5, 15];
 const COMMON_DOSES = [2.5, 3.0, 3.5, 4.0, 4.5, 5.0, 6.0, 7.0, 8.0, 9.0, 10]; 
 const STANDARD_TITRATION = [2.5, 5, 7.5, 10, 12.5, 15];
 const SESSION_KEY = 'mounjaroRememberedUser';
+const COMMON_SYMPTOMS = ['噁心', '嘔吐', '腹瀉', '便秘', '胃脹', '胃痛', '食慾下降', '頭暈', '頭痛', '疲倦', '口渴', '注射處不適'];
+const MOOD_OPTIONS = ['很好', '平穩', '普通', '低落', '焦慮', '煩躁', '疲憊'];
+
+const normalizeSymptoms = (symptoms) => Array.isArray(symptoms) ? symptoms.filter(Boolean) : [];
+
+function LogExtraDetails({ log, noteClassName = 'bg-slate-50' }) {
+  const symptoms = normalizeSymptoms(log.symptoms);
+  return (
+    <div className="mt-3 space-y-2">
+      {symptoms.length > 0 && (
+        <div className="flex flex-wrap gap-2">
+          {symptoms.map(symptom => (
+            <span key={symptom} className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-amber-50 text-amber-700 border border-amber-100">
+              {symptom}
+            </span>
+          ))}
+        </div>
+      )}
+      {log.mood && (
+        <div className="text-sm text-slate-600">
+          <span className="font-medium text-slate-700">心情：</span>{log.mood}
+        </div>
+      )}
+      {log.notes && <div className={`text-sm text-slate-600 p-3 rounded-lg ${noteClassName}`}>{log.notes}</div>}
+    </div>
+  );
+}
 
 function TrendChart({ logs }) {
   // 資料少於2筆不畫圖
@@ -585,15 +612,27 @@ function LogView({ appUser, allLogs }) {
   const [weight, setWeight] = useState('');
   const [dose, setDose] = useState('2.5');
   const [notes, setNotes] = useState('');
+  const [symptoms, setSymptoms] = useState([]);
+  const [mood, setMood] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [editingLogId, setEditingLogId] = useState(null);
   const [editDate, setEditDate] = useState('');
   const [editWeight, setEditWeight] = useState('');
   const [editDose, setEditDose] = useState('');
   const [editNotes, setEditNotes] = useState('');
+  const [editSymptoms, setEditSymptoms] = useState([]);
+  const [editMood, setEditMood] = useState('');
   const [editError, setEditError] = useState('');
 
   const myLogs = allLogs.filter(log => log.username === appUser.username);
+
+  const toggleSymptom = (symptom) => {
+    setSymptoms(current => current.includes(symptom) ? current.filter(item => item !== symptom) : [...current, symptom]);
+  };
+
+  const toggleEditSymptom = (symptom) => {
+    setEditSymptoms(current => current.includes(symptom) ? current.filter(item => item !== symptom) : [...current, symptom]);
+  };
 
   const handleAddLog = async (e) => {
     e.preventDefault();
@@ -607,11 +646,15 @@ function LogView({ appUser, allLogs }) {
         date,
         weight: parseFloat(weight),
         dose: parseFloat(dose),
+        symptoms,
+        mood,
         notes,
         createdAt: new Date().toISOString()
       });
       setWeight('');
       setNotes('');
+      setSymptoms([]);
+      setMood('');
     } catch (error) {
       console.error("寫入紀錄失敗:", error);
     }
@@ -634,6 +677,8 @@ function LogView({ appUser, allLogs }) {
     setEditWeight(String(log.weight ?? ''));
     setEditDose(String(log.dose ?? ''));
     setEditNotes(log.notes || '');
+    setEditSymptoms(normalizeSymptoms(log.symptoms));
+    setEditMood(log.mood || '');
     setEditError('');
   };
 
@@ -643,6 +688,8 @@ function LogView({ appUser, allLogs }) {
     setEditWeight('');
     setEditDose('');
     setEditNotes('');
+    setEditSymptoms([]);
+    setEditMood('');
     setEditError('');
   };
 
@@ -657,6 +704,8 @@ function LogView({ appUser, allLogs }) {
         date: editDate,
         weight: parseFloat(editWeight),
         dose: parseFloat(editDose),
+        symptoms: editSymptoms,
+        mood: editMood,
         notes: editNotes,
         updatedAt: new Date().toISOString()
       }, { merge: true });
@@ -694,6 +743,30 @@ function LogView({ appUser, allLogs }) {
               <input type="number" step="0.1" required value={dose} onChange={e => setDose(e.target.value)}
                 className="w-full border border-slate-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-indigo-500" />
             </div>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-slate-600 mb-2">常見不舒服症狀 (可複選)</label>
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+              {COMMON_SYMPTOMS.map(symptom => (
+                <label key={symptom} className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-sm cursor-pointer transition-colors ${symptoms.includes(symptom) ? 'bg-amber-50 border-amber-300 text-amber-800' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'}`}>
+                  <input
+                    type="checkbox"
+                    checked={symptoms.includes(symptom)}
+                    onChange={() => toggleSymptom(symptom)}
+                    className="rounded border-slate-300 text-amber-600 focus:ring-amber-500"
+                  />
+                  <span>{symptom}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-slate-600 mb-1">心情 (選填)</label>
+            <select value={mood} onChange={e => setMood(e.target.value)}
+              className="w-full border border-slate-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-indigo-500 bg-white">
+              <option value="">請選擇今天心情</option>
+              {MOOD_OPTIONS.map(option => <option key={option} value={option}>{option}</option>)}
+            </select>
           </div>
           <div>
             <label className="block text-sm font-medium text-slate-600 mb-1">副作用或感受筆記 (選填)</label>
@@ -742,6 +815,30 @@ function LogView({ appUser, allLogs }) {
                         </div>
                       </div>
                       <div>
+                        <label className="block text-xs font-medium text-slate-500 mb-2">常見不舒服症狀</label>
+                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                          {COMMON_SYMPTOMS.map(symptom => (
+                            <label key={symptom} className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-xs cursor-pointer transition-colors ${editSymptoms.includes(symptom) ? 'bg-amber-50 border-amber-300 text-amber-800' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'}`}>
+                              <input
+                                type="checkbox"
+                                checked={editSymptoms.includes(symptom)}
+                                onChange={() => toggleEditSymptom(symptom)}
+                                className="rounded border-slate-300 text-amber-600 focus:ring-amber-500"
+                              />
+                              <span>{symptom}</span>
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-slate-500 mb-1">心情</label>
+                        <select value={editMood} onChange={e => setEditMood(e.target.value)}
+                          className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 bg-white">
+                          <option value="">未記錄</option>
+                          {MOOD_OPTIONS.map(option => <option key={option} value={option}>{option}</option>)}
+                        </select>
+                      </div>
+                      <div>
                         <label className="block text-xs font-medium text-slate-500 mb-1">副作用或感受筆記</label>
                         <textarea value={editNotes} onChange={e => setEditNotes(e.target.value)} rows="2"
                           className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 resize-none"></textarea>
@@ -778,7 +875,7 @@ function LogView({ appUser, allLogs }) {
                           </button>
                         </div>
                       </div>
-                      {log.notes && <div className="mt-3 text-sm text-slate-600 bg-slate-50 p-3 rounded-lg">{log.notes}</div>}
+                      <LogExtraDetails log={log} />
                     </>
                   )}
                 </div>
@@ -931,7 +1028,7 @@ function AdminView({ appUser, usersList, allLogs, allSchedules }) {
                         </div>
                       </div>
                     </div>
-                    {log.notes && <div className="mt-3 text-sm text-slate-600 bg-white border border-slate-100 p-3 rounded-lg">{log.notes}</div>}
+                    <LogExtraDetails log={log} noteClassName="bg-white border border-slate-100" />
                   </div>
                 );
               })}
