@@ -87,6 +87,7 @@ const COMMON_SYMPTOMS = ['噁心', '嘔吐', '腹瀉', '便秘', '胃脹', '胃�
 const MOOD_OPTIONS = ['很好', '平穩', '普通', '低落', '焦慮', '煩躁', '疲憊'];
 
 const normalizeSymptoms = (symptoms) => Array.isArray(symptoms) ? symptoms.filter(Boolean) : [];
+const isInjectionLog = (log) => log?.recordType !== 'weight' && Number.isFinite(Number(log?.dose)) && Number(log.dose) > 0;
 
 function LogExtraDetails({ log, noteClassName = 'bg-slate-50' }) {
   const symptoms = normalizeSymptoms(log.symptoms);
@@ -127,10 +128,11 @@ function TrendChart({ logs }) {
 
   // 計算體重與劑量的最大/最小值，用來做圖表比例尺
   const weights = chartData.map(d => d.weight);
-  const doses = chartData.map(d => d.dose);
+  const injectionData = chartData.filter(isInjectionLog);
+  const doses = injectionData.map(d => Number(d.dose));
   const maxWeight = Math.max(...weights) + 1;
   const minWeight = Math.min(...weights) - 1;
-  const maxDose = Math.max(...doses) + 1;
+  const maxDose = doses.length > 0 ? Math.max(...doses) + 1 : 5;
   const minDose = 0; // 劑量從 0 開始畫比較直覺
 
   const rangeW = maxWeight - minWeight === 0 ? 10 : maxWeight - minWeight;
@@ -149,7 +151,10 @@ function TrendChart({ logs }) {
 
   // 產生多邊形線條屬性
   const weightPoints = chartData.map((d, i) => `${getX(i)},${getYW(d.weight)}`).join(' ');
-  const dosePoints = chartData.map((d, i) => `${getX(i)},${getYD(d.dose)}`).join(' ');
+  const dosePoints = chartData
+    .map((d, i) => isInjectionLog(d) ? `${getX(i)},${getYD(Number(d.dose))}` : null)
+    .filter(Boolean)
+    .join(' ');
 
   return (
     <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm overflow-hidden mb-6">
@@ -171,20 +176,24 @@ function TrendChart({ logs }) {
             <line x1={padX} y1={svgH-padY} x2={svgW-padX} y2={svgH-padY} stroke="#e2e8f0" strokeWidth="2" />
 
             {/* 畫劑量線 (綠色) */}
-            <polyline points={dosePoints} fill="none" stroke="#34d399" strokeWidth="3" strokeLinejoin="round" />
+            {injectionData.length > 1 && <polyline points={dosePoints} fill="none" stroke="#34d399" strokeWidth="3" strokeLinejoin="round" />}
             {/* 畫體重線 (藍色) */}
             <polyline points={weightPoints} fill="none" stroke="#3b82f6" strokeWidth="3" strokeLinejoin="round" />
 
             {/* 畫資料點與標籤 */}
             {chartData.map((d, i) => {
-              const x = getX(i); const yw = getYW(d.weight); const yd = getYD(d.dose);
+              const x = getX(i); const yw = getYW(d.weight); const yd = isInjectionLog(d) ? getYD(Number(d.dose)) : null;
               // 日期格式化 MM/DD
               const dateStr = d.date.substring(5).replace('-', '/');
               return (
                 <g key={i}>
                   {/* 綠點 (劑量) */}
-                  <circle cx={x} cy={yd} r="4" fill="#10b981" stroke="white" strokeWidth="2"><title>{`日期: ${d.date}\n劑量: ${d.dose} mg`}</title></circle>
-                  <text x={x} y={yd - 10} fontSize="10" fill="#059669" textAnchor="middle" fontWeight="bold">{d.dose}</text>
+                  {yd !== null && (
+                    <>
+                      <circle cx={x} cy={yd} r="4" fill="#10b981" stroke="white" strokeWidth="2"><title>{`日期: ${d.date}\n劑量: ${d.dose} mg`}</title></circle>
+                      <text x={x} y={yd - 10} fontSize="10" fill="#059669" textAnchor="middle" fontWeight="bold">{d.dose}</text>
+                    </>
+                  )}
                   
                   {/* 藍點 (體重) */}
                   <circle cx={x} cy={yw} r="5" fill="#2563eb" stroke="white" strokeWidth="2"><title>{`日期: ${d.date}\n體重: ${d.weight} kg`}</title></circle>
@@ -608,6 +617,7 @@ function ScheduleView({ appUser, userSchedule }) {
 }
 
 function LogView({ appUser, allLogs }) {
+  const [recordType, setRecordType] = useState('injection');
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   const [weight, setWeight] = useState('');
   const [dose, setDose] = useState('2.5');
@@ -616,6 +626,7 @@ function LogView({ appUser, allLogs }) {
   const [mood, setMood] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [editingLogId, setEditingLogId] = useState(null);
+  const [editRecordType, setEditRecordType] = useState('injection');
   const [editDate, setEditDate] = useState('');
   const [editWeight, setEditWeight] = useState('');
   const [editDose, setEditDose] = useState('');
@@ -636,16 +647,17 @@ function LogView({ appUser, allLogs }) {
 
   const handleAddLog = async (e) => {
     e.preventDefault();
-    if (!date || !weight || !dose || !db || isSubmitting) return;
+    if (!date || !weight || (recordType === 'injection' && !dose) || !db || isSubmitting) return;
 
     setIsSubmitting(true);
     try {
       const logRef = doc(collection(db, 'mounjaroLogs'));
       await setDoc(logRef, {
         username: appUser.username,
+        recordType,
         date,
         weight: parseFloat(weight),
-        dose: parseFloat(dose),
+        dose: recordType === 'injection' ? parseFloat(dose) : null,
         symptoms,
         mood,
         notes,
@@ -663,7 +675,7 @@ function LogView({ appUser, allLogs }) {
 
   const handleDelete = async (id) => {
     if (!db) return;
-    if (!window.confirm('確定要刪除這筆施打紀錄嗎？')) return;
+    if (!window.confirm('確定要刪除這筆紀錄嗎？')) return;
     try {
       await deleteDoc(doc(db, 'mounjaroLogs', id));
     } catch (error) {
@@ -673,6 +685,7 @@ function LogView({ appUser, allLogs }) {
 
   const startEditLog = (log) => {
     setEditingLogId(log.id);
+    setEditRecordType(isInjectionLog(log) ? 'injection' : 'weight');
     setEditDate(log.date || '');
     setEditWeight(String(log.weight ?? ''));
     setEditDose(String(log.dose ?? ''));
@@ -684,6 +697,7 @@ function LogView({ appUser, allLogs }) {
 
   const cancelEditLog = () => {
     setEditingLogId(null);
+    setEditRecordType('injection');
     setEditDate('');
     setEditWeight('');
     setEditDose('');
@@ -695,15 +709,16 @@ function LogView({ appUser, allLogs }) {
 
   const handleUpdateLog = async (e) => {
     e.preventDefault();
-    if (!editingLogId || !editDate || !editWeight || !editDose || !db || isSubmitting) return;
+    if (!editingLogId || !editDate || !editWeight || (editRecordType === 'injection' && !editDose) || !db || isSubmitting) return;
 
     setIsSubmitting(true);
     setEditError('');
     try {
       await setDoc(doc(db, 'mounjaroLogs', editingLogId), {
+        recordType: editRecordType,
         date: editDate,
         weight: parseFloat(editWeight),
-        dose: parseFloat(editDose),
+        dose: editRecordType === 'injection' ? parseFloat(editDose) : null,
         symptoms: editSymptoms,
         mood: editMood,
         notes: editNotes,
@@ -724,10 +739,33 @@ function LogView({ appUser, allLogs }) {
 
       <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 sm:p-6">
         <h2 className="text-lg font-semibold text-slate-800 mb-4 flex items-center">
-          <BookIcon /> <span className="ml-2">新增施打紀錄 (雲端同步)</span>
+          <BookIcon /> <span className="ml-2">新增健康紀錄 (雲端同步)</span>
         </h2>
         <form onSubmit={handleAddLog} className="space-y-4">
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+          <fieldset>
+            <legend className="block text-sm font-medium text-slate-600 mb-2">今天要記錄什麼？</legend>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => setRecordType('weight')}
+                aria-pressed={recordType === 'weight'}
+                className={`rounded-xl border px-3 py-3 text-left transition-all ${recordType === 'weight' ? 'border-blue-500 bg-blue-50 text-blue-800 ring-1 ring-blue-500' : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'}`}
+              >
+                <span className="block text-sm font-bold">⚖️ 只記錄體重</span>
+                <span className="mt-1 block text-xs opacity-75">今天沒有施打</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setRecordType('injection')}
+                aria-pressed={recordType === 'injection'}
+                className={`rounded-xl border px-3 py-3 text-left transition-all ${recordType === 'injection' ? 'border-emerald-500 bg-emerald-50 text-emerald-800 ring-1 ring-emerald-500' : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'}`}
+              >
+                <span className="block text-sm font-bold">💉 施打＋體重</span>
+                <span className="mt-1 block text-xs opacity-75">記錄本次施打劑量</span>
+              </button>
+            </div>
+          </fieldset>
+          <div className={`grid grid-cols-2 gap-4 ${recordType === 'injection' ? 'md:grid-cols-3' : ''}`}>
             <div>
               <label className="block text-sm font-medium text-slate-600 mb-1">日期</label>
               <input type="date" required value={date} onChange={e => setDate(e.target.value)}
@@ -738,11 +776,13 @@ function LogView({ appUser, allLogs }) {
               <input type="number" step="0.1" required value={weight} onChange={e => setWeight(e.target.value)} placeholder="例如 75.5"
                 className="w-full border border-slate-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-indigo-500" />
             </div>
-            <div className="col-span-2 md:col-span-1">
-              <label className="block text-sm font-medium text-slate-600 mb-1">施打劑量 (mg)</label>
-              <input type="number" step="0.1" required value={dose} onChange={e => setDose(e.target.value)}
-                className="w-full border border-slate-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-indigo-500" />
-            </div>
+            {recordType === 'injection' && (
+              <div className="col-span-2 md:col-span-1">
+                <label className="block text-sm font-medium text-slate-600 mb-1">施打劑量 (mg)</label>
+                <input type="number" min="0.1" step="0.1" required value={dose} onChange={e => setDose(e.target.value)}
+                  className="w-full border border-slate-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-indigo-500" />
+              </div>
+            )}
           </div>
           <div>
             <label className="block text-sm font-medium text-slate-600 mb-2">常見不舒服症狀 (可複選)</label>
@@ -769,12 +809,12 @@ function LogView({ appUser, allLogs }) {
             </select>
           </div>
           <div>
-            <label className="block text-sm font-medium text-slate-600 mb-1">副作用或感受筆記 (選填)</label>
-            <textarea value={notes} onChange={e => setNotes(e.target.value)} placeholder="例如：打完第二天有點微噁心、食慾明顯下降..." rows="2"
+            <label className="block text-sm font-medium text-slate-600 mb-1">身體狀況或感受筆記 (選填)</label>
+            <textarea value={notes} onChange={e => setNotes(e.target.value)} placeholder={recordType === 'injection' ? '例如：打完第二天有點微噁心、食慾明顯下降...' : '例如：今天精神不錯、食慾正常...'} rows="2"
               className="w-full border border-slate-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-indigo-500 resize-none"></textarea>
           </div>
           <button type="submit" disabled={isSubmitting} className={`w-full font-medium py-3 rounded-xl transition-colors shadow-sm ${isSubmitting ? 'bg-slate-400 text-white cursor-not-allowed' : 'bg-indigo-600 hover:bg-indigo-700 text-white'}`}>
-            {isSubmitting ? '儲存中...' : '儲存紀錄'}
+            {isSubmitting ? '儲存中...' : recordType === 'injection' ? '儲存施打與體重' : '儲存體重紀錄'}
           </button>
         </form>
       </div>
@@ -783,7 +823,7 @@ function LogView({ appUser, allLogs }) {
         <h2 className="text-lg font-semibold text-slate-800 mb-4">歷史紀錄</h2>
         {myLogs.length === 0 ? (
           <div className="text-center py-8 text-slate-400 bg-slate-50 rounded-xl border border-dashed border-slate-200">
-            尚無紀錄，請在上方新增您的第一筆施打資料。
+            尚無紀錄，請在上方新增您的第一筆資料。
           </div>
         ) : (
           <div className="space-y-3">
@@ -797,6 +837,13 @@ function LogView({ appUser, allLogs }) {
                 <div key={log.id} className="relative group bg-white border border-slate-200 p-4 rounded-xl hover:border-indigo-300 transition-colors">
                   {editingLogId === log.id ? (
                     <form onSubmit={handleUpdateLog} className="space-y-4">
+                      <div>
+                        <label className="block text-xs font-medium text-slate-500 mb-2">紀錄類型</label>
+                        <div className="grid grid-cols-2 gap-2">
+                          <button type="button" onClick={() => setEditRecordType('weight')} className={`rounded-lg border px-3 py-2 text-xs font-bold ${editRecordType === 'weight' ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-slate-200 text-slate-500'}`}>⚖️ 只記錄體重</button>
+                          <button type="button" onClick={() => setEditRecordType('injection')} className={`rounded-lg border px-3 py-2 text-xs font-bold ${editRecordType === 'injection' ? 'border-emerald-500 bg-emerald-50 text-emerald-700' : 'border-slate-200 text-slate-500'}`}>💉 施打＋體重</button>
+                        </div>
+                      </div>
                       <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                         <div>
                           <label className="block text-xs font-medium text-slate-500 mb-1">日期</label>
@@ -808,11 +855,13 @@ function LogView({ appUser, allLogs }) {
                           <input type="number" step="0.1" required value={editWeight} onChange={e => setEditWeight(e.target.value)}
                             className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500" />
                         </div>
-                        <div className="col-span-2 md:col-span-1">
-                          <label className="block text-xs font-medium text-slate-500 mb-1">施打劑量 (mg)</label>
-                          <input type="number" step="0.1" required value={editDose} onChange={e => setEditDose(e.target.value)}
-                            className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500" />
-                        </div>
+                        {editRecordType === 'injection' && (
+                          <div className="col-span-2 md:col-span-1">
+                            <label className="block text-xs font-medium text-slate-500 mb-1">施打劑量 (mg)</label>
+                            <input type="number" min="0.1" step="0.1" required value={editDose} onChange={e => setEditDose(e.target.value)}
+                              className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500" />
+                          </div>
+                        )}
                       </div>
                       <div>
                         <label className="block text-xs font-medium text-slate-500 mb-2">常見不舒服症狀</label>
@@ -839,7 +888,7 @@ function LogView({ appUser, allLogs }) {
                         </select>
                       </div>
                       <div>
-                        <label className="block text-xs font-medium text-slate-500 mb-1">副作用或感受筆記</label>
+                        <label className="block text-xs font-medium text-slate-500 mb-1">身體狀況或感受筆記</label>
                         <textarea value={editNotes} onChange={e => setEditNotes(e.target.value)} rows="2"
                           className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 resize-none"></textarea>
                       </div>
@@ -857,7 +906,14 @@ function LogView({ appUser, allLogs }) {
                         <div>
                           <div className="text-sm font-semibold text-slate-700 mb-1">{log.date}</div>
                           <div className="flex flex-wrap gap-2">
-                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-800">💉 {log.dose} mg</span>
+                            {isInjectionLog(log) ? (
+                              <>
+                                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800">施打紀錄</span>
+                                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-emerald-50 text-emerald-700">💉 {log.dose} mg</span>
+                              </>
+                            ) : (
+                              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-blue-100 text-blue-800">僅體重紀錄</span>
+                            )}
                             <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">⚖️ {log.weight} kg</span>
                             {weightDiff !== null && (
                               <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${weightDiff > 0 ? 'bg-red-50 text-red-600' : 'bg-green-50 text-green-600'}`}>
@@ -939,7 +995,7 @@ function AdminView({ appUser, usersList, allLogs, allSchedules }) {
       setErrorMsg('為了安全，管理者帳號不開放在此刪除。');
       return;
     }
-    if (!window.confirm(`確定要刪除帳號「${targetUser.username}」嗎？該帳號的施打紀錄與雲端計畫也會一起刪除。`)) return;
+    if (!window.confirm(`確定要刪除帳號「${targetUser.username}」嗎？該帳號的健康紀錄與雲端計畫也會一起刪除。`)) return;
 
     setIsDeletingUser(true);
     try {
@@ -978,7 +1034,7 @@ function AdminView({ appUser, usersList, allLogs, allSchedules }) {
 
         <div className="grid grid-cols-2 gap-3">
           <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
-            <p className="text-xs text-slate-400 mb-1">施打紀錄</p>
+            <p className="text-xs text-slate-400 mb-1">健康紀錄總數</p>
             <p className="text-2xl font-bold text-slate-800">{targetUserLogs.length} <span className="text-xs font-normal text-slate-400">筆</span></p>
           </div>
           <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
@@ -1017,8 +1073,15 @@ function AdminView({ appUser, usersList, allLogs, allSchedules }) {
                     <div className="flex flex-wrap justify-between items-start gap-2">
                       <div>
                         <div className="text-sm font-semibold text-slate-700 mb-1">{log.date}</div>
-                        <div className="flex gap-2">
-                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-800">💉 {log.dose} mg</span>
+                        <div className="flex flex-wrap gap-2">
+                          {isInjectionLog(log) ? (
+                            <>
+                              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800">施打紀錄</span>
+                              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-emerald-50 text-emerald-700">💉 {log.dose} mg</span>
+                            </>
+                          ) : (
+                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-blue-100 text-blue-800">僅體重紀錄</span>
+                          )}
                           <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">⚖️ {log.weight} kg</span>
                           {weightDiff !== null && (
                             <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${weightDiff > 0 ? 'bg-red-50 text-red-600' : 'bg-green-50 text-green-600'}`}>
@@ -1056,7 +1119,7 @@ function AdminView({ appUser, usersList, allLogs, allSchedules }) {
               <div className="space-y-2">
                 {targetUserSchedule.schedule.map(item => {
                   const plannedDate = item.date?.toDate ? item.date.toDate() : new Date(item.date);
-                  const nearbyLog = targetUserLogs.find(log => {
+                  const nearbyLog = targetUserLogs.filter(isInjectionLog).find(log => {
                     const actualDate = new Date(`${log.date}T12:00:00`);
                     return Math.abs(actualDate.getTime() - plannedDate.getTime()) <= 3 * 24 * 60 * 60 * 1000;
                   });
@@ -1137,7 +1200,11 @@ function AdminView({ appUser, usersList, allLogs, allSchedules }) {
                 <div>
                   <div className="font-bold text-indigo-600 mb-1">{log.username}</div>
                   <div className="flex gap-2 text-xs font-medium">
-                    <span className="bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded">💉 {log.dose}</span>
+                    {isInjectionLog(log) ? (
+                      <span className="bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded">💉 {log.dose} mg</span>
+                    ) : (
+                      <span className="bg-blue-100 text-blue-800 px-2 py-0.5 rounded">僅體重</span>
+                    )}
                     <span className="bg-blue-100 text-blue-800 px-2 py-0.5 rounded">⚖️ {log.weight}</span>
                   </div>
                 </div>
@@ -1347,7 +1414,7 @@ export default function MounjaroApp() {
             <span className="mr-2"><CalendarIcon /></span> 計畫表
           </button>
           <button onClick={() => setActiveTab('log')} className={`flex-1 whitespace-nowrap flex items-center justify-center py-3 px-4 text-sm font-medium rounded-lg transition-all ${activeTab === 'log' ? 'bg-indigo-50 text-indigo-700 shadow-sm' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-700'}`}>
-            <span className="mr-2"><BookIcon /></span> 施打紀錄
+            <span className="mr-2"><BookIcon /></span> 健康紀錄
           </button>
           {appUser.role === 'admin' && (
             <button onClick={() => setActiveTab('admin')} className={`flex-1 whitespace-nowrap flex items-center justify-center py-3 px-4 text-sm font-bold rounded-lg transition-all ${activeTab === 'admin' ? 'bg-amber-100 text-amber-800 shadow-sm' : 'text-amber-600 hover:bg-amber-50'}`}>
