@@ -18,8 +18,8 @@ const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 
-const SyringeIcon = () => (
-  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-indigo-600">
+const SyringeIcon = ({ className = 'text-indigo-600' }) => (
+  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
     <path d="m18 2 4 4"/><path d="m17 7 3-3"/><path d="M19 9 8.7 19.3c-1-1-2.5-1-3.4 0l-.6.6c-.9.9-.9 2.5 0 3.4 1 1 2.5 1 3.4 0l.6-.6c.9-.9.9-2.5 0-3.4L19 9"/><path d="m9 11 4 4"/><path d="m5 19-3 3"/><path d="m14 4 6 6"/>
   </svg>
 );
@@ -109,6 +109,27 @@ const getSuggestedDoseFromSchedule = (scheduleRecord) => {
     .sort((a, b) => a.parsedDate - b.parsedDate);
   const suggestedItem = scheduleItems.find(item => item.parsedDate >= today) || scheduleItems[scheduleItems.length - 1];
   return suggestedItem ? String(suggestedItem.dose) : '';
+};
+
+const toLocalDateKey = (dateValue) => {
+  const parsedDate = dateValue instanceof Date ? dateValue : new Date(dateValue);
+  if (Number.isNaN(parsedDate.getTime())) return '';
+  const year = parsedDate.getFullYear();
+  const month = String(parsedDate.getMonth() + 1).padStart(2, '0');
+  const day = String(parsedDate.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
+const calculateDoseExhaustion = (remainingMg, plannedEntries) => {
+  if (remainingMg <= 0) return { exhausted: true, exhaustionEntry: null, remainingAfterPlan: 0 };
+  let projectedRemaining = remainingMg;
+  for (const entry of plannedEntries) {
+    projectedRemaining -= Number(entry.dose || 0);
+    if (projectedRemaining <= 0) {
+      return { exhausted: false, exhaustionEntry: entry, remainingAfterPlan: 0 };
+    }
+  }
+  return { exhausted: false, exhaustionEntry: null, remainingAfterPlan: Math.max(0, projectedRemaining) };
 };
 
 function LogExtraDetails({ log, noteClassName = 'bg-slate-50' }) {
@@ -233,18 +254,390 @@ function TrendChart({ logs }) {
   );
 }
 
-function CalculatorView({ appUser, usersList, allSchedules }) {
+function SingleDoseTracker({ appUser, allLogs, inventory, penStrength }) {
+  const earliestOwnLogDate = allLogs
+    .filter(log => log.username === appUser.username && isInjectionLog(log) && log.date)
+    .map(log => log.date)
+    .sort()[0];
+  const [startDate, setStartDate] = useState(inventory?.startDate || earliestOwnLogDate || new Date().toISOString().split('T')[0]);
+  const [startDateTouched, setStartDateTouched] = useState(false);
+  const [saveMessage, setSaveMessage] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
+
+  useEffect(() => {
+    if (inventory?.startDate) {
+      setStartDate(inventory.startDate);
+      return;
+    }
+    if (!startDateTouched && earliestOwnLogDate) setStartDate(earliestOwnLogDate);
+  }, [inventory?.startDate, earliestOwnLogDate, startDateTouched]);
+
+  const includedLogs = allLogs
+    .filter(log => log.username === appUser.username && isInjectionLog(log) && log.date >= startDate)
+    .sort((a, b) => new Date(b.date) - new Date(a.date));
+  const totalMg = penStrength * 4;
+  const usedMg = includedLogs.reduce((sum, log) => sum + Number(log.dose || 0), 0);
+  const remainingMg = Math.max(0, totalMg - usedMg);
+  const exceededMg = Math.max(0, usedMg - totalMg);
+  const latestDose = includedLogs.length > 0 ? Number(includedLogs[0].dose) : 0;
+  const remainingDoseCount = latestDose > 0 ? Math.floor(remainingMg / latestDose) : 0;
+  const hasUnsavedChanges = !inventory || inventory.startDate !== startDate || Number(inventory.penStrength) !== Number(penStrength);
+
+  const handleSaveInventory = async () => {
+    if (!db || !startDate || isSaving) return;
+    setIsSaving(true);
+    setSaveMessage('');
+    try {
+      await setDoc(doc(db, 'mounjaroDoseInventories', appUser.username), {
+        username: appUser.username,
+        startDate,
+        penStrength: Number(penStrength),
+        updatedAt: new Date().toISOString()
+      }, { merge: true });
+      setSaveMessage('單人剩餘量設定已同步到雲端。');
+    } catch (error) {
+      console.error('儲存單人剩餘量設定失敗:', error);
+      setSaveMessage('儲存失敗，請稍後再試。');
+    }
+    setIsSaving(false);
+  };
+
+  return (
+    <div className="overflow-hidden rounded-3xl border border-sky-200/70 bg-gradient-to-br from-sky-50 via-white to-cyan-50 shadow-lg shadow-sky-100/50">
+      <div className="p-5 sm:p-6">
+        <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 mb-5">
+          <div>
+            <span className="inline-flex items-center rounded-full bg-sky-100 px-3 py-1 text-xs font-bold text-sky-700">個人用量追蹤</span>
+            <h2 className="mt-2 text-xl font-black text-slate-800">我的預估剩餘劑量</h2>
+            <p className="mt-1 text-sm text-slate-500">依目前這支筆開始使用後的施打紀錄自動扣除。</p>
+          </div>
+          <div className="rounded-2xl bg-white/80 px-4 py-3 text-center shadow-sm ring-1 ring-sky-100">
+            <p className="text-xs font-medium text-sky-600">目前規格</p>
+            <p className="text-2xl font-black text-sky-800">{penStrength} <span className="text-xs">mg</span></p>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto] gap-3 items-end mb-5">
+          <div>
+            <label className="block text-sm font-bold text-slate-600 mb-1">這支筆納入紀錄的起始日期</label>
+            <input type="date" value={startDate} onChange={event => { setStartDate(event.target.value); setStartDateTouched(true); setSaveMessage(''); }} className="w-full rounded-xl border border-sky-200 bg-white px-4 py-3 focus:ring-2 focus:ring-sky-400" />
+          </div>
+          <button type="button" disabled={!hasUnsavedChanges || isSaving} onClick={handleSaveInventory} className="rounded-xl bg-sky-600 px-5 py-3 font-bold text-white shadow-sm hover:bg-sky-700 disabled:bg-slate-300 disabled:shadow-none">
+            {isSaving ? '儲存中...' : hasUnsavedChanges ? '儲存設定' : '已同步'}
+          </button>
+        </div>
+
+        {saveMessage && <p className={`mb-4 rounded-xl px-4 py-3 text-sm ${saveMessage.includes('失敗') ? 'bg-red-50 text-red-700' : 'bg-emerald-50 text-emerald-700'}`}>{saveMessage}</p>}
+
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          <div className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-slate-100">
+            <p className="text-xs font-bold text-slate-400">標稱總量</p>
+            <p className="mt-1 text-2xl font-black text-slate-800">{totalMg.toFixed(1)} <span className="text-xs font-medium">mg</span></p>
+          </div>
+          <div className="rounded-2xl bg-amber-50 p-4 ring-1 ring-amber-100">
+            <p className="text-xs font-bold text-amber-600">已記錄使用</p>
+            <p className="mt-1 text-2xl font-black text-amber-800">{usedMg.toFixed(1)} <span className="text-xs font-medium">mg</span></p>
+          </div>
+          <div className={`rounded-2xl p-4 ring-1 ${exceededMg > 0 ? 'bg-red-50 ring-red-200' : 'bg-emerald-50 ring-emerald-100'}`}>
+            <p className={`text-xs font-bold ${exceededMg > 0 ? 'text-red-600' : 'text-emerald-600'}`}>{exceededMg > 0 ? '超出標稱量' : '預估剩餘'}</p>
+            <p className={`mt-1 text-2xl font-black ${exceededMg > 0 ? 'text-red-800' : 'text-emerald-800'}`}>{(exceededMg > 0 ? exceededMg : remainingMg).toFixed(1)} <span className="text-xs font-medium">mg</span></p>
+          </div>
+          <div className="rounded-2xl bg-indigo-50 p-4 ring-1 ring-indigo-100">
+            <p className="text-xs font-bold text-indigo-600">約可再施打</p>
+            <p className="mt-1 text-2xl font-black text-indigo-800">{latestDose > 0 && exceededMg === 0 ? remainingDoseCount : '—'} <span className="text-xs font-medium">次</span></p>
+          </div>
+        </div>
+
+        <div className="mt-4 flex flex-wrap items-center gap-2 text-xs text-slate-500">
+          <span className="rounded-full bg-white px-3 py-1.5 ring-1 ring-slate-100">已納入 {includedLogs.length} 筆施打紀錄</span>
+          {latestDose > 0 && <span className="rounded-full bg-white px-3 py-1.5 ring-1 ring-slate-100">最近劑量 {latestDose} mg</span>}
+          <span className="rounded-full bg-white px-3 py-1.5 ring-1 ring-slate-100">起始日 {formatLogDate(startDate)}</span>
+        </div>
+
+        {exceededMg > 0 && <p className="mt-4 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">目前紀錄已超過這支筆的標稱總量，請確認起始日期是否包含上一支筆的紀錄。</p>}
+        <p className="mt-4 text-xs leading-relaxed text-slate-400">估算不包含排氣耗損與不可使用的殘留藥液；請依照醫師、藥師及原廠使用指示用藥。</p>
+      </div>
+    </div>
+  );
+}
+
+function SharedDosePlanner({ appUser, usersList, allLogs, allSchedules, sharingPlans, penStrength }) {
+  const [shareUsername, setShareUsername] = useState('');
+  const [shareStartDate, setShareStartDate] = useState(new Date().toISOString().split('T')[0]);
+  const [shareMessage, setShareMessage] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
+
+  const isParticipant = (plan) => plan?.participants?.includes(appUser.username)
+    || plan?.requester === appUser.username
+    || plan?.partner === appUser.username;
+  const planIncludesUser = (plan, username) => plan?.participants?.includes(username)
+    || plan?.requester === username
+    || plan?.partner === username;
+  const relatedPlans = sharingPlans.filter(isParticipant);
+  const activePlan = relatedPlans.find(plan => plan.status === 'active');
+  const incomingRequests = relatedPlans.filter(plan => plan.status === 'pending' && plan.partner === appUser.username);
+  const outgoingRequest = relatedPlans.find(plan => plan.status === 'pending' && plan.requester === appUser.username);
+  const hasOpenPlan = Boolean(activePlan || incomingRequests.length > 0 || outgoingRequest);
+  const availableShareUsers = usersList.filter(user => user.username !== appUser.username && !sharingPlans.some(plan => ['pending', 'active'].includes(plan.status) && planIncludesUser(plan, user.username)));
+
+  const handleShareUserChange = (event) => {
+    const username = event.target.value;
+    setShareUsername(username);
+    setShareMessage('');
+    if (!username) return;
+    const earliestDate = allLogs
+      .filter(log => [appUser.username, username].includes(log.username) && isInjectionLog(log) && log.date)
+      .map(log => log.date)
+      .sort()[0];
+    setShareStartDate(earliestDate || new Date().toISOString().split('T')[0]);
+  };
+
+  const handleSendRequest = async () => {
+    if (!db || !shareUsername || !shareStartDate || hasOpenPlan || isSaving) return;
+    const partnerHasOpenPlan = sharingPlans.some(plan => ['pending', 'active'].includes(plan.status) && planIncludesUser(plan, shareUsername));
+    if (partnerHasOpenPlan) {
+      setShareMessage('對方目前已有等待中或進行中的綁定，暫時無法邀請。');
+      return;
+    }
+    setIsSaving(true);
+    setShareMessage('');
+    try {
+      const requestRef = doc(collection(db, 'mounjaroSharingPlans'));
+      await setDoc(requestRef, {
+        requester: appUser.username,
+        partner: shareUsername,
+        participants: [appUser.username, shareUsername],
+        status: 'pending',
+        penStrength: Number(penStrength),
+        startDate: shareStartDate,
+        createdAt: new Date().toISOString()
+      });
+      setShareMessage(`已送出邀請，等待 ${shareUsername} 同意。`);
+      setShareUsername('');
+    } catch (error) {
+      console.error('送出共用規劃邀請失敗:', error);
+      setShareMessage('邀請送出失敗，請稍後再試。');
+    }
+    setIsSaving(false);
+  };
+
+  const handlePlanStatus = async (plan, status) => {
+    if (!db || !plan?.id || isSaving) return;
+    setIsSaving(true);
+    setShareMessage('');
+    try {
+      if (status === 'active') {
+        const participants = plan?.participants?.length === 2 ? plan.participants : [plan.requester, plan.partner];
+        const conflictingPlan = sharingPlans.find(item => item.id !== plan.id && item.status === 'active' && participants.some(username => planIncludesUser(item, username)));
+        if (conflictingPlan) {
+          setShareMessage('其中一位使用者已有進行中的綁定，無法接受這次邀請。');
+          setIsSaving(false);
+          return;
+        }
+        const otherPendingPlans = sharingPlans.filter(item => item.id !== plan.id && item.status === 'pending' && participants.some(username => planIncludesUser(item, username)));
+        await Promise.all([
+          setDoc(doc(db, 'mounjaroSharingPlans', plan.id), {
+            status: 'active',
+            acceptedAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString()
+          }, { merge: true }),
+          ...otherPendingPlans.map(item => setDoc(doc(db, 'mounjaroSharingPlans', item.id), {
+            status: 'cancelled',
+            updatedAt: new Date().toISOString()
+          }, { merge: true }))
+        ]);
+      } else {
+        await setDoc(doc(db, 'mounjaroSharingPlans', plan.id), {
+          status,
+          updatedAt: new Date().toISOString()
+        }, { merge: true });
+      }
+      setShareMessage(status === 'active' ? '已接受邀請，雙方紀錄已開始合併估算。' : status === 'rejected' ? '已拒絕邀請。' : status === 'cancelled' ? '已取消邀請。' : '已結束這組規劃。');
+    } catch (error) {
+      console.error('更新共用規劃失敗:', error);
+      setShareMessage('更新失敗，請稍後再試。');
+    }
+    setIsSaving(false);
+  };
+
+  const activeParticipants = activePlan?.participants?.length === 2
+    ? activePlan.participants
+    : activePlan ? [activePlan.requester, activePlan.partner] : [];
+  const activeLogs = activePlan
+    ? allLogs
+      .filter(log => activeParticipants.includes(log.username) && isInjectionLog(log) && log.date >= activePlan.startDate)
+      .sort((a, b) => new Date(b.date) - new Date(a.date))
+    : [];
+  const planTotalMg = Number(activePlan?.penStrength || 0) * 4;
+  const usedByUser = activeParticipants.reduce((totals, username) => ({
+    ...totals,
+    [username]: activeLogs
+      .filter(log => log.username === username)
+      .reduce((sum, log) => sum + Number(log.dose || 0), 0)
+  }), {});
+  const totalUsedMg = Object.values(usedByUser).reduce((sum, dose) => sum + dose, 0);
+  const remainingMg = Math.max(0, planTotalMg - totalUsedMg);
+  const exceededMg = Math.max(0, totalUsedMg - planTotalMg);
+  const getLatestDose = (username) => {
+    const latestLog = allLogs.find(log => log.username === username && isInjectionLog(log));
+    if (latestLog) return Number(latestLog.dose);
+    const userSchedule = allSchedules.find(item => item.id === username || item.username === username);
+    return Number(getSuggestedDoseFromSchedule(userSchedule)) || 0;
+  };
+  const activePartner = activeParticipants.find(username => username !== appUser.username);
+
+  return (
+    <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 sm:p-6">
+      <div className="mb-5">
+        <h2 className="text-lg font-semibold text-slate-800 flex items-center">
+          <UsersIcon /> <span className="ml-2">兩人用量規劃</span>
+        </h2>
+        <p className="text-sm text-slate-500 mt-1">邀請對方同意綁定後，系統才會合併雙方的施打紀錄進行估算。</p>
+      </div>
+
+      <div className="bg-red-50 border border-red-200 rounded-xl p-4 text-sm text-red-800 mb-5">
+        <p className="font-bold">⚠️ 注射筆不可與他人共用</p>
+        <p className="mt-1 leading-relaxed">原廠規定同一支 KwikPen 只能由單一病人使用，即使更換針頭也不能共用。本區僅供雙方用量與庫存紀錄估算，兩人必須各自使用自己的注射筆。</p>
+      </div>
+
+      {shareMessage && (
+        <div className={`mb-4 rounded-xl border px-4 py-3 text-sm ${shareMessage.includes('失敗') || shareMessage.includes('無法') ? 'bg-red-50 border-red-200 text-red-700' : 'bg-emerald-50 border-emerald-200 text-emerald-700'}`}>
+          {shareMessage}
+        </div>
+      )}
+
+      {incomingRequests.map(request => (
+        <div key={request.id} className="mb-4 rounded-xl border-2 border-amber-300 bg-amber-50 p-4">
+          <p className="font-bold text-amber-900">收到 {request.requester} 的規劃邀請</p>
+          <p className="text-sm text-amber-800 mt-1">規格 {request.penStrength} mg，納入 {formatLogDate(request.startDate)} 起的雙方施打紀錄。</p>
+          <div className="flex gap-2 mt-3">
+            <button type="button" disabled={isSaving} onClick={() => handlePlanStatus(request, 'active')} className="flex-1 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-bold text-white hover:bg-emerald-700 disabled:bg-slate-400">接受並綁定</button>
+            <button type="button" disabled={isSaving} onClick={() => handlePlanStatus(request, 'rejected')} className="rounded-lg bg-white border border-slate-300 px-4 py-2 text-sm font-bold text-slate-600 hover:bg-slate-50 disabled:text-slate-300">拒絕</button>
+          </div>
+        </div>
+      ))}
+
+      {outgoingRequest && !activePlan && (
+        <div className="mb-4 rounded-xl border border-indigo-200 bg-indigo-50 p-4">
+          <p className="font-bold text-indigo-900">等待 {outgoingRequest.partner} 同意</p>
+          <p className="text-sm text-indigo-700 mt-1">規格 {outgoingRequest.penStrength} mg，從 {formatLogDate(outgoingRequest.startDate)} 起納入紀錄。</p>
+          <button type="button" disabled={isSaving} onClick={() => handlePlanStatus(outgoingRequest, 'cancelled')} className="mt-3 rounded-lg bg-white border border-indigo-200 px-4 py-2 text-sm font-bold text-indigo-700 hover:bg-indigo-100 disabled:text-slate-300">取消邀請</button>
+        </div>
+      )}
+
+      {activePlan && (
+        <div className="space-y-4 animation-fade-in">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 rounded-xl bg-emerald-50 border border-emerald-200 p-4">
+            <div>
+              <p className="font-bold text-emerald-900">已與 {activePartner} 綁定</p>
+              <p className="text-sm text-emerald-700 mt-1">規格 {activePlan.penStrength} mg・從 {formatLogDate(activePlan.startDate)} 起計算</p>
+            </div>
+            <button type="button" disabled={isSaving} onClick={() => window.confirm('確定要結束這組兩人用量規劃嗎？') && handlePlanStatus(activePlan, 'ended')} className="shrink-0 rounded-lg bg-white border border-emerald-300 px-4 py-2 text-sm font-bold text-emerald-700 hover:bg-emerald-100 disabled:text-slate-300">解除綁定</button>
+          </div>
+
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div className="rounded-xl bg-indigo-50 border border-indigo-100 p-3">
+              <p className="text-xs text-indigo-500">標稱總量</p>
+              <p className="text-xl font-black text-indigo-800 mt-1">{planTotalMg.toFixed(1)} <span className="text-xs font-medium">mg</span></p>
+            </div>
+            <div className="rounded-xl bg-amber-50 border border-amber-100 p-3">
+              <p className="text-xs text-amber-600">已記錄用量</p>
+              <p className="text-xl font-black text-amber-800 mt-1">{totalUsedMg.toFixed(1)} <span className="text-xs font-medium">mg</span></p>
+            </div>
+            <div className={`rounded-xl border p-3 ${exceededMg > 0 ? 'bg-red-50 border-red-200' : 'bg-emerald-50 border-emerald-100'}`}>
+              <p className={`text-xs ${exceededMg > 0 ? 'text-red-600' : 'text-emerald-600'}`}>{exceededMg > 0 ? '已超出總量' : '預估剩餘量'}</p>
+              <p className={`text-xl font-black mt-1 ${exceededMg > 0 ? 'text-red-800' : 'text-emerald-800'}`}>{(exceededMg > 0 ? exceededMg : remainingMg).toFixed(1)} <span className="text-xs font-medium">mg</span></p>
+            </div>
+            <div className="rounded-xl bg-slate-50 border border-slate-200 p-3">
+              <p className="text-xs text-slate-500">納入施打紀錄</p>
+              <p className="text-xl font-black text-slate-800 mt-1">{activeLogs.length} <span className="text-xs font-medium">筆</span></p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {activeParticipants.map(username => {
+              const latestDose = getLatestDose(username);
+              const remainingDoseCount = latestDose > 0 ? Math.floor(remainingMg / latestDose) : 0;
+              return (
+                <div key={username} className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                  <p className="font-bold text-slate-700">{username}{username === appUser.username ? '（您）' : ''}</p>
+                  <p className="text-sm text-slate-500 mt-1">已納入 {Number(usedByUser[username] || 0).toFixed(1)} mg</p>
+                  {exceededMg === 0 && latestDose > 0 && <p className="text-sm text-slate-500 mt-1">依最近劑量 {latestDose} mg，全部剩餘量約可施打 {remainingDoseCount} 次</p>}
+                </div>
+              );
+            })}
+          </div>
+
+          {exceededMg > 0 && (
+            <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+              紀錄用量已超過這支規格的標稱總量，請確認起始日期是否包含其他支筆的施打紀錄；需要重新計算時，可解除綁定後建立新的規劃。
+            </div>
+          )}
+
+          <div className="rounded-xl border border-slate-200 overflow-hidden">
+            <div className="bg-slate-50 px-4 py-3 text-sm font-bold text-slate-700">已納入的施打紀錄</div>
+            {activeLogs.length === 0 ? (
+              <p className="px-4 py-5 text-sm text-slate-400">指定日期後尚無施打紀錄。</p>
+            ) : (
+              <div className="divide-y divide-slate-100">
+                {activeLogs.slice(0, 12).map(log => (
+                  <div key={log.id} className="flex items-center justify-between gap-3 px-4 py-3 text-sm">
+                    <div><span className="font-bold text-indigo-700">{log.username}</span><span className="ml-2 text-slate-500">{formatLogDate(log.date)}</span></div>
+                    <span className="font-bold text-emerald-700">{log.dose} mg</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+          <p className="text-xs text-slate-400 leading-relaxed">估算依雲端施打紀錄自動更新，不包含排氣耗損與不可使用的殘留藥液，也不能取代醫師或藥師的用藥指示。</p>
+        </div>
+      )}
+
+      {!hasOpenPlan && (
+        <div className="space-y-4">
+          {availableShareUsers.length === 0 ? (
+            <div className="text-sm text-slate-500 bg-slate-50 border border-dashed border-slate-200 rounded-xl p-4">目前沒有可邀請的使用者；其他帳號可能已有等待中或進行中的綁定。</div>
+          ) : (
+            <>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-600 mb-1">選擇共同規劃使用者</label>
+                  <select value={shareUsername} onChange={handleShareUserChange} className="w-full border border-slate-300 rounded-xl px-3 py-3 bg-white focus:ring-2 focus:ring-indigo-500">
+                    <option value="">請選擇使用者</option>
+                    {availableShareUsers.map(user => <option key={user.id} value={user.username}>{user.username}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-600 mb-1">納入紀錄起始日期</label>
+                  <input type="date" value={shareStartDate} onChange={event => setShareStartDate(event.target.value)} className="w-full border border-slate-300 rounded-xl px-3 py-3 focus:ring-2 focus:ring-indigo-500" />
+                </div>
+              </div>
+              <div className="rounded-xl bg-blue-50 border border-blue-100 p-4 text-sm text-blue-700">
+                將以目前選擇的 <strong>{penStrength} mg</strong> 規格建立邀請，並納入起始日期後雙方的所有施打紀錄。若過去紀錄來自不同支筆，請調整起始日期。
+              </div>
+              <button type="button" disabled={!shareUsername || !shareStartDate || isSaving} onClick={handleSendRequest} className="w-full rounded-xl bg-indigo-600 px-4 py-3 font-bold text-white hover:bg-indigo-700 disabled:bg-slate-400 disabled:cursor-not-allowed">
+                {isSaving ? '送出中...' : '送出綁定邀請'}
+              </button>
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function CalculatorView({ appUser, usersList, allLogs, allSchedules, sharingPlans, inventory }) {
   const [penStrength, setPenStrength] = useState(10); 
   const [targetDose, setTargetDose] = useState(2.5); 
   const [customDose, setCustomDose] = useState(''); 
-  const [sharingEnabled, setSharingEnabled] = useState(false);
-  const [shareUsername, setShareUsername] = useState('');
-  const [shareDose, setShareDose] = useState('');
-  const [plannedSharedRounds, setPlannedSharedRounds] = useState('1');
   const [clicks, setClicks] = useState(0);
   const [exactClicks, setExactClicks] = useState(0);
   const [totalDoses, setTotalDoses] = useState(0);
   const [isExceeding, setIsExceeding] = useState(false);
+
+  useEffect(() => {
+    if (Number(inventory?.penStrength) > 0) setPenStrength(Number(inventory.penStrength));
+  }, [inventory?.penStrength]);
 
   useEffect(() => {
     if (targetDose > 0 && penStrength > 0) {
@@ -268,26 +661,6 @@ function CalculatorView({ appUser, usersList, allSchedules }) {
     else setTargetDose(0);
   };
 
-  const handleShareUserChange = (e) => {
-    const username = e.target.value;
-    setShareUsername(username);
-    const userSchedule = allSchedules.find(item => item.id === username || item.username === username);
-    setShareDose(getSuggestedDoseFromSchedule(userSchedule));
-  };
-
-  const availableShareUsers = usersList.filter(user => user.username !== appUser.username);
-  const shareDoseValue = Number.parseFloat(shareDose) || 0;
-  const sharedRoundsValue = Math.max(0, Math.floor(Number(plannedSharedRounds) || 0));
-  const penTotalMg = penStrength * 4;
-  const combinedDose = targetDose + shareDoseValue;
-  const plannedCombinedUsage = combinedDose * sharedRoundsValue;
-  const remainingAfterPlan = Math.max(0, penTotalMg - plannedCombinedUsage);
-  const shortageAfterPlan = Math.max(0, plannedCombinedUsage - penTotalMg);
-  const maxCombinedRounds = combinedDose > 0 ? Math.floor(penTotalMg / combinedDose) : 0;
-  const remainingAfterMaxRounds = combinedDose > 0 ? penTotalMg - (maxCombinedRounds * combinedDose) : penTotalMg;
-  const remainingOwnDoses = targetDose > 0 ? Math.floor(remainingAfterPlan / targetDose) : 0;
-  const remainingShareDoses = shareDoseValue > 0 ? Math.floor(remainingAfterPlan / shareDoseValue) : 0;
-
   let fullInjections = 0, remainingClicks = clicks;
   if (clicks > 60) {
     fullInjections = Math.floor(clicks / 60);
@@ -296,7 +669,7 @@ function CalculatorView({ appUser, usersList, allSchedules }) {
 
   return (
     <div className="space-y-6 animation-fade-in">
-      <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 sm:p-6">
+      <div className="bg-gradient-to-br from-indigo-50 via-white to-violet-50 rounded-2xl shadow-sm border border-indigo-100 p-5 sm:p-6">
         <h2 className="text-lg font-semibold text-slate-800 mb-4 flex items-center">
           <span className="bg-indigo-600 text-white w-6 h-6 rounded-full inline-flex items-center justify-center text-sm mr-2 shadow-sm">1</span>
           您購買的筆針規格？
@@ -312,7 +685,7 @@ function CalculatorView({ appUser, usersList, allSchedules }) {
         </div>
       </div>
 
-      <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 sm:p-6">
+      <div className="bg-gradient-to-br from-emerald-50 via-white to-cyan-50 rounded-2xl shadow-sm border border-emerald-100 p-5 sm:p-6">
         <h2 className="text-lg font-semibold text-slate-800 mb-4 flex items-center">
           <span className="bg-indigo-600 text-white w-6 h-6 rounded-full inline-flex items-center justify-center text-sm mr-2 shadow-sm">2</span>
           這次要施打的劑量？
@@ -381,104 +754,26 @@ function CalculatorView({ appUser, usersList, allSchedules }) {
         </div>
       </div>
 
-      <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 sm:p-6">
-        <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 mb-5">
-          <div>
-            <h2 className="text-lg font-semibold text-slate-800 flex items-center">
-              <UsersIcon /> <span className="ml-2">兩人用量規劃</span>
-            </h2>
-            <p className="text-sm text-slate-500 mt-1">選擇另一位使用者，估算兩人的總需求與理論剩餘量。</p>
-          </div>
-          <button
-            type="button"
-            onClick={() => setSharingEnabled(current => !current)}
-            aria-pressed={sharingEnabled}
-            className={`shrink-0 px-4 py-2 rounded-xl text-sm font-bold border transition-colors ${sharingEnabled ? 'bg-indigo-600 border-indigo-600 text-white' : 'bg-white border-slate-300 text-slate-600 hover:bg-slate-50'}`}
-          >
-            {sharingEnabled ? '關閉兩人估算' : '開啟兩人估算'}
-          </button>
-        </div>
+      <SingleDoseTracker
+        appUser={appUser}
+        allLogs={allLogs}
+        inventory={inventory}
+        penStrength={penStrength}
+      />
 
-        <div className="bg-red-50 border border-red-200 rounded-xl p-4 text-sm text-red-800 mb-5">
-          <p className="font-bold">⚠️ 注射筆不可與他人共用</p>
-          <p className="mt-1 leading-relaxed">原廠規定同一支 KwikPen 只能由單一病人使用，即使更換針頭也不能共用。本區僅供總用量與庫存規劃，兩人必須各自使用自己的注射筆。</p>
-        </div>
-
-        {sharingEnabled && (
-          <div className="space-y-5 animation-fade-in">
-            {availableShareUsers.length === 0 ? (
-              <div className="text-sm text-slate-500 bg-slate-50 border border-dashed border-slate-200 rounded-xl p-4">
-                目前沒有其他可選擇的使用者，請先由管理員新增帳號。
-              </div>
-            ) : (
-              <>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-slate-600 mb-1">共同規劃使用者</label>
-                    <select value={shareUsername} onChange={handleShareUserChange}
-                      className="w-full border border-slate-300 rounded-xl px-3 py-3 bg-white focus:ring-2 focus:ring-indigo-500">
-                      <option value="">請選擇使用者</option>
-                      {availableShareUsers.map(user => <option key={user.id} value={user.username}>{user.username}</option>)}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-slate-600 mb-1">對方本次劑量 (mg)</label>
-                    <input type="number" min="0.1" step="0.1" value={shareDose} onChange={e => setShareDose(e.target.value)} disabled={!shareUsername} placeholder="例如 2.5"
-                      className="w-full border border-slate-300 rounded-xl px-3 py-3 focus:ring-2 focus:ring-indigo-500 disabled:bg-slate-100 disabled:text-slate-400" />
-                    {shareUsername && shareDose && <p className="text-xs text-slate-400 mt-1">已依對方計畫表帶入，可自行修改。</p>}
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-slate-600 mb-1">預計共同施打次數</label>
-                    <input type="number" min="1" step="1" value={plannedSharedRounds} onChange={e => setPlannedSharedRounds(e.target.value)}
-                      className="w-full border border-slate-300 rounded-xl px-3 py-3 focus:ring-2 focus:ring-indigo-500" />
-                  </div>
-                </div>
-
-                {shareUsername && shareDoseValue > 0 && targetDose > 0 && sharedRoundsValue > 0 && (
-                  <div className="space-y-4">
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                      <div className="bg-indigo-50 rounded-xl p-3 border border-indigo-100">
-                        <p className="text-xs text-indigo-500">一支標稱總量</p>
-                        <p className="text-xl font-black text-indigo-800 mt-1">{penTotalMg.toFixed(1)} <span className="text-xs font-medium">mg</span></p>
-                      </div>
-                      <div className="bg-slate-50 rounded-xl p-3 border border-slate-200">
-                        <p className="text-xs text-slate-500">兩人每次總需求</p>
-                        <p className="text-xl font-black text-slate-800 mt-1">{combinedDose.toFixed(1)} <span className="text-xs font-medium">mg</span></p>
-                      </div>
-                      <div className="bg-amber-50 rounded-xl p-3 border border-amber-100">
-                        <p className="text-xs text-amber-600">預計總需求</p>
-                        <p className="text-xl font-black text-amber-800 mt-1">{plannedCombinedUsage.toFixed(1)} <span className="text-xs font-medium">mg</span></p>
-                      </div>
-                      <div className={`rounded-xl p-3 border ${shortageAfterPlan > 0 ? 'bg-red-50 border-red-200' : 'bg-emerald-50 border-emerald-100'}`}>
-                        <p className={`text-xs ${shortageAfterPlan > 0 ? 'text-red-600' : 'text-emerald-600'}`}>{shortageAfterPlan > 0 ? '超出標稱總量' : '理論剩餘量'}</p>
-                        <p className={`text-xl font-black mt-1 ${shortageAfterPlan > 0 ? 'text-red-800' : 'text-emerald-800'}`}>{(shortageAfterPlan > 0 ? shortageAfterPlan : remainingAfterPlan).toFixed(1)} <span className="text-xs font-medium">mg</span></p>
-                      </div>
-                    </div>
-
-                    <div className="bg-slate-50 border border-slate-200 rounded-xl p-4">
-                      <h3 className="font-bold text-slate-700 text-sm mb-3">估算結果</h3>
-                      <ul className="space-y-2 text-sm text-slate-600">
-                        <li>以數學總量計算，最多可涵蓋 <strong className="text-slate-800">{maxCombinedRounds} 次</strong>兩人用量，之後理論剩餘 <strong className="text-slate-800">{remainingAfterMaxRounds.toFixed(1)} mg</strong>。</li>
-                        {shortageAfterPlan > 0 ? (
-                          <li className="text-red-700">目前規劃會超出一支筆的標稱總量 <strong>{shortageAfterPlan.toFixed(1)} mg</strong>。</li>
-                        ) : (
-                          <li>完成預計次數後，剩餘量約等於您目前劑量 <strong>{remainingOwnDoses} 次</strong>，或 {shareUsername} 目前劑量 <strong>{remainingShareDoses} 次</strong>。</li>
-                        )}
-                      </ul>
-                    </div>
-                    <p className="text-xs text-slate-400 leading-relaxed">以上為藥量數學估算，不包含排氣耗損、筆內不可使用的殘留藥液，也不能取代醫師或藥師的用藥指示。</p>
-                  </div>
-                )}
-              </>
-            )}
-          </div>
-        )}
-      </div>
+      <SharedDosePlanner
+        appUser={appUser}
+        usersList={usersList}
+        allLogs={allLogs}
+        allSchedules={allSchedules}
+        sharingPlans={sharingPlans}
+        penStrength={penStrength}
+      />
     </div>
   );
 }
 
-function ScheduleView({ appUser, userSchedule }) {
+function ScheduleView({ appUser, userSchedule, allLogs, inventory, sharingPlans, allSchedules }) {
   const [startDate, setStartDate] = useState(new Date().toISOString().split('T')[0]);
   const [startDose, setStartDose] = useState(2.5);
   const [schedule, setSchedule] = useState([]);
@@ -567,6 +862,37 @@ function ScheduleView({ appUser, userSchedule }) {
     ? serializePlan(startDate, startDose, schedule, isCustomized)
     : '';
   const hasUnsavedChanges = Boolean(currentPlanHash && currentPlanHash !== lastSavedHash);
+
+  const todayKey = toLocalDateKey(new Date());
+  const buildUpcomingEntries = (items, username) => (items || [])
+    .map(item => {
+      const parsedDate = item.date?.toDate ? item.date.toDate() : new Date(item.date);
+      return { ...item, username, parsedDate, dateKey: toLocalDateKey(parsedDate), dose: Number(item.dose) };
+    })
+    .filter(item => item.dateKey && item.dateKey >= todayKey && item.dose > 0)
+    .filter(item => !allLogs.some(log => log.username === username && isInjectionLog(log) && log.date === item.dateKey))
+    .sort((a, b) => a.parsedDate - b.parsedDate);
+
+  const ownIncludedLogs = inventory ? allLogs.filter(log => log.username === appUser.username && isInjectionLog(log) && log.date >= inventory.startDate) : [];
+  const ownTotalMg = inventory ? Number(inventory.penStrength) * 4 : 0;
+  const ownUsedMg = ownIncludedLogs.reduce((sum, log) => sum + Number(log.dose || 0), 0);
+  const ownRemainingMg = Math.max(0, ownTotalMg - ownUsedMg);
+  const ownFutureEntries = buildUpcomingEntries(schedule, appUser.username);
+  const ownProjection = inventory ? calculateDoseExhaustion(ownRemainingMg, ownFutureEntries) : null;
+
+  const activeSharedPlan = sharingPlans.find(plan => plan.status === 'active' && (plan?.participants?.includes(appUser.username) || plan.requester === appUser.username || plan.partner === appUser.username));
+  const sharedParticipants = activeSharedPlan?.participants?.length === 2 ? activeSharedPlan.participants : activeSharedPlan ? [activeSharedPlan.requester, activeSharedPlan.partner] : [];
+  const sharedTotalMg = activeSharedPlan ? Number(activeSharedPlan.penStrength) * 4 : 0;
+  const sharedUsedMg = activeSharedPlan ? allLogs
+    .filter(log => sharedParticipants.includes(log.username) && isInjectionLog(log) && log.date >= activeSharedPlan.startDate)
+    .reduce((sum, log) => sum + Number(log.dose || 0), 0) : 0;
+  const sharedRemainingMg = Math.max(0, sharedTotalMg - sharedUsedMg);
+  const sharedFutureEntries = activeSharedPlan ? sharedParticipants.flatMap(username => {
+    if (username === appUser.username) return buildUpcomingEntries(schedule, username);
+    const participantSchedule = allSchedules.find(item => item.id === username || item.username === username);
+    return buildUpcomingEntries(participantSchedule?.schedule || [], username);
+  }).sort((a, b) => a.parsedDate - b.parsedDate) : [];
+  const sharedProjection = activeSharedPlan ? calculateDoseExhaustion(sharedRemainingMg, sharedFutureEntries) : null;
 
   const generateSchedule = () => {
     if (!startDate) return;
@@ -663,6 +989,69 @@ function ScheduleView({ appUser, userSchedule }) {
           </span>
         )}
       </div>
+
+      <div className={`grid gap-4 mb-6 ${activeSharedPlan ? 'lg:grid-cols-2' : 'grid-cols-1'}`}>
+        <div className="relative overflow-hidden rounded-2xl border border-violet-200 bg-gradient-to-br from-violet-600 via-indigo-600 to-blue-600 p-5 text-white shadow-lg shadow-indigo-200/60">
+          <div className="absolute -right-8 -top-8 h-28 w-28 rounded-full border-[18px] border-white/10"></div>
+          <div className="relative">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-xs font-bold uppercase tracking-wider text-indigo-100">單人用量預測</p>
+                <h3 className="mt-1 text-lg font-black">目前這支筆何時用完？</h3>
+              </div>
+              {inventory && <span className="rounded-full bg-white/15 px-3 py-1 text-xs font-bold ring-1 ring-white/20">{inventory.penStrength} mg 規格</span>}
+            </div>
+            {!inventory ? (
+              <div className="mt-5 rounded-xl bg-white/10 p-4 text-sm text-indigo-50 ring-1 ring-white/15">
+                請先到「劑量計算」儲存目前這支筆的起始日期，系統即可依計畫表推算用完時間。
+              </div>
+            ) : (
+              <div className="mt-5">
+                <p className="text-sm text-indigo-100">目前預估剩餘</p>
+                <p className="mt-1 text-4xl font-black">{ownRemainingMg.toFixed(1)} <span className="text-sm font-bold">mg</span></p>
+                <div className="mt-4 rounded-xl bg-white/10 p-4 ring-1 ring-white/20">
+                  {ownProjection.exhausted ? (
+                    <><p className="font-black text-amber-200">已達標稱總量</p><p className="mt-1 text-sm text-indigo-100">請建立新一支筆的起始日期。</p></>
+                  ) : ownProjection.exhaustionEntry ? (
+                    <><p className="text-xl font-black">預估 {formatLogDate(ownProjection.exhaustionEntry.dateKey)} 用完</p><p className="mt-1 text-sm text-indigo-100">第 {ownProjection.exhaustionEntry.week} 週施打 {ownProjection.exhaustionEntry.dose} mg 後達到標稱總量。</p></>
+                  ) : (
+                    <><p className="font-black text-emerald-200">目前計畫期間內尚不會用完</p><p className="mt-1 text-sm text-indigo-100">依現有計畫結束後，預估仍剩 {ownProjection.remainingAfterPlan.toFixed(1)} mg。</p></>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {activeSharedPlan && (
+          <div className="relative overflow-hidden rounded-2xl border border-emerald-200 bg-gradient-to-br from-emerald-500 via-teal-500 to-cyan-500 p-5 text-white shadow-lg shadow-emerald-200/60">
+            <div className="absolute -right-8 -bottom-10 h-32 w-32 rounded-full bg-white/10 blur-sm"></div>
+            <div className="relative">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-xs font-bold uppercase tracking-wider text-emerald-50">雙方綁定預測</p>
+                  <h3 className="mt-1 text-lg font-black">兩人合併用量何時用完？</h3>
+                </div>
+                <span className="rounded-full bg-white/15 px-3 py-1 text-xs font-bold ring-1 ring-white/20">{activeSharedPlan.penStrength} mg 規格</span>
+              </div>
+              <div className="mt-5">
+                <p className="text-sm text-emerald-50">合併預估剩餘</p>
+                <p className="mt-1 text-4xl font-black">{sharedRemainingMg.toFixed(1)} <span className="text-sm font-bold">mg</span></p>
+                <div className="mt-4 rounded-xl bg-white/10 p-4 ring-1 ring-white/20">
+                  {sharedProjection.exhausted ? (
+                    <><p className="font-black text-amber-100">已達標稱總量</p><p className="mt-1 text-sm text-emerald-50">請解除綁定並建立新一組規劃。</p></>
+                  ) : sharedProjection.exhaustionEntry ? (
+                    <><p className="text-xl font-black">預估 {formatLogDate(sharedProjection.exhaustionEntry.dateKey)} 用完</p><p className="mt-1 text-sm text-emerald-50">計入 {sharedProjection.exhaustionEntry.username} 的 {sharedProjection.exhaustionEntry.dose} mg 計畫後達到標稱總量。</p></>
+                  ) : (
+                    <><p className="font-black text-cyan-100">目前兩人的計畫期間內尚不會用完</p><p className="mt-1 text-sm text-emerald-50">依現有計畫結束後，預估仍剩 {sharedProjection.remainingAfterPlan.toFixed(1)} mg。</p></>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
       <div className="mb-4 flex flex-col sm:flex-row sm:items-end gap-4 bg-slate-50 p-4 rounded-xl relative">
         <div className="flex-1">
           <label className="block text-sm font-medium text-slate-600 mb-1">第一針施打日期</label>
@@ -877,9 +1266,9 @@ function LogView({ appUser, allLogs }) {
       {/* 📊 顯示個人趨勢圖表 */}
       <TrendChart logs={myLogs} />
 
-      <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 sm:p-6">
+      <div className="bg-gradient-to-br from-emerald-50 via-white to-teal-50 rounded-2xl shadow-sm border border-emerald-100 p-5 sm:p-6">
         <h2 className="text-lg font-semibold text-slate-800 mb-4 flex items-center">
-          <BookIcon /> <span className="ml-2">新增健康紀錄 (雲端同步)</span>
+          <span className="rounded-xl bg-emerald-100 p-2 text-emerald-700"><BookIcon /></span><span className="ml-2">新增健康紀錄 <small className="font-medium text-emerald-600">雲端同步</small></span>
         </h2>
         <form onSubmit={handleAddLog} className="space-y-4">
           <fieldset>
@@ -1084,7 +1473,7 @@ function LogView({ appUser, allLogs }) {
   );
 }
 
-function AdminView({ appUser, usersList, allLogs, allSchedules }) {
+function AdminView({ appUser, usersList, allLogs, allSchedules, sharingPlans }) {
   const [newUsername, setNewUsername] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
@@ -1135,15 +1524,18 @@ function AdminView({ appUser, usersList, allLogs, allSchedules }) {
       setErrorMsg('為了安全，管理者帳號不開放在此刪除。');
       return;
     }
-    if (!window.confirm(`確定要刪除帳號「${targetUser.username}」嗎？該帳號的健康紀錄與雲端計畫也會一起刪除。`)) return;
+    if (!window.confirm(`確定要刪除帳號「${targetUser.username}」嗎？該帳號的健康紀錄、雲端計畫與兩人綁定資料也會一起刪除。`)) return;
 
     setIsDeletingUser(true);
     try {
       const logsToDelete = allLogs.filter(log => log.username === targetUser.username);
+      const sharingPlansToDelete = sharingPlans.filter(plan => plan?.participants?.includes(targetUser.username) || plan.requester === targetUser.username || plan.partner === targetUser.username);
       await Promise.all([
         deleteDoc(doc(db, 'mounjaroUsers', targetUser.id)),
         deleteDoc(doc(db, 'mounjaroSchedules', targetUser.username)),
-        ...logsToDelete.map(log => deleteDoc(doc(db, 'mounjaroLogs', log.id)))
+        deleteDoc(doc(db, 'mounjaroDoseInventories', targetUser.username)),
+        ...logsToDelete.map(log => deleteDoc(doc(db, 'mounjaroLogs', log.id))),
+        ...sharingPlansToDelete.map(plan => deleteDoc(doc(db, 'mounjaroSharingPlans', plan.id)))
       ]);
       if (selectedUser?.username === targetUser.username) {
         setSelectedUser(null);
@@ -1365,6 +1757,8 @@ export default function MounjaroApp() {
   const [usersList, setUsersList] = useState([]);
   const [allLogs, setAllLogs] = useState([]);
   const [allSchedules, setAllSchedules] = useState([]);
+  const [sharingPlans, setSharingPlans] = useState([]);
+  const [doseInventories, setDoseInventories] = useState([]);
   const [usersLoaded, setUsersLoaded] = useState(false);
   const [sessionChecked, setSessionChecked] = useState(false);
   
@@ -1413,10 +1807,24 @@ export default function MounjaroApp() {
       setAllSchedules(schedules);
     }, err => console.error("Fetch schedules error:", err));
 
+    const sharingPlansRef = collection(db, 'mounjaroSharingPlans');
+    const unsubSharingPlans = onSnapshot(sharingPlansRef, (snapshot) => {
+      const plans = snapshot.docs.map(planDoc => ({ id: planDoc.id, ...planDoc.data() }));
+      setSharingPlans(plans);
+    }, err => console.error('Fetch sharing plans error:', err));
+
+    const doseInventoriesRef = collection(db, 'mounjaroDoseInventories');
+    const unsubDoseInventories = onSnapshot(doseInventoriesRef, (snapshot) => {
+      const inventories = snapshot.docs.map(inventoryDoc => ({ id: inventoryDoc.id, ...inventoryDoc.data() }));
+      setDoseInventories(inventories);
+    }, err => console.error('Fetch dose inventories error:', err));
+
     return () => {
       unsubUsers();
       unsubLogs();
       unsubSchedules();
+      unsubSharingPlans();
+      unsubDoseInventories();
     };
   }, [firebaseUser]);
 
@@ -1474,11 +1882,14 @@ export default function MounjaroApp() {
 
   if (!firebaseUser || !usersLoaded || !sessionChecked) {
     return (
-      <div className="min-h-screen bg-slate-100 flex items-center justify-center p-4 font-sans text-slate-800">
-        <div className="bg-white rounded-2xl shadow-sm border border-slate-200 px-8 py-7 text-center">
-          <div className="w-10 h-10 border-4 border-indigo-100 border-t-indigo-600 rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="font-bold text-slate-700">正在恢復登入狀態...</p>
-          <p className="text-xs text-slate-400 mt-1">請稍候，正在連接雲端資料。</p>
+      <div className="min-h-screen bg-gradient-to-br from-indigo-100 via-white to-cyan-100 flex items-center justify-center p-4 font-sans text-slate-800">
+        <div className="bg-white/85 backdrop-blur-xl rounded-3xl shadow-xl shadow-indigo-100 border border-white px-10 py-9 text-center">
+          <div className="relative w-14 h-14 mx-auto mb-5">
+            <div className="absolute inset-0 rounded-full bg-indigo-200 animate-ping opacity-40"></div>
+            <div className="relative w-14 h-14 border-4 border-indigo-100 border-t-indigo-600 rounded-full animate-spin"></div>
+          </div>
+          <p className="font-black text-slate-800">正在為您準備健康資料</p>
+          <p className="text-xs text-slate-400 mt-2">連接雲端並恢復登入狀態...</p>
         </div>
       </div>
     );
@@ -1486,30 +1897,33 @@ export default function MounjaroApp() {
 
   if (!appUser) {
     return (
-      <div className="min-h-screen bg-slate-100 flex items-center justify-center p-4 font-sans text-slate-800">
-        <div className="max-w-md w-full bg-white rounded-2xl shadow-xl border border-slate-200 p-8 animation-fade-in">
+      <div className="relative min-h-screen overflow-hidden bg-gradient-to-br from-indigo-100 via-white to-emerald-100 flex items-center justify-center p-4 font-sans text-slate-800">
+        <div className="pointer-events-none absolute -left-24 top-16 h-72 w-72 rounded-full bg-violet-300/30 blur-3xl"></div>
+        <div className="pointer-events-none absolute -right-24 bottom-12 h-80 w-80 rounded-full bg-cyan-300/30 blur-3xl"></div>
+        <div className="relative max-w-md w-full bg-white/88 backdrop-blur-xl rounded-[2rem] shadow-2xl shadow-indigo-200/50 border border-white p-7 sm:p-9 animation-fade-in">
           <div className="text-center mb-8">
-            <div className="bg-indigo-50 w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-4 text-indigo-600">
-              <SyringeIcon />
+            <div className="bg-gradient-to-br from-indigo-500 to-violet-600 w-20 h-20 rounded-3xl flex items-center justify-center mx-auto mb-5 text-white shadow-lg shadow-indigo-200 rotate-3">
+              <SyringeIcon className="text-white" />
             </div>
-            <h1 className="text-2xl font-bold text-slate-900">猛健樂管理系統</h1>
-            <p className="text-slate-500 text-sm mt-2">請登入您的專屬帳號以存取數據</p>
+            <span className="inline-flex rounded-full bg-indigo-50 px-3 py-1 text-xs font-bold tracking-wide text-indigo-600 mb-3">MY WELLNESS JOURNEY</span>
+            <h1 className="text-3xl font-black text-slate-900 tracking-tight">猛健樂健康日誌</h1>
+            <p className="text-slate-500 text-sm mt-2">記錄每一步，讓改變變得看得見</p>
           </div>
 
           <form onSubmit={handleLogin} className="space-y-5">
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1">帳號</label>
               <input type="text" required value={loginUser} onChange={e => setLoginUser(e.target.value)}
-                className="w-full border border-slate-300 rounded-xl px-4 py-3 focus:ring-2 focus:ring-indigo-500" placeholder="輸入您的帳號" />
+                className="w-full border border-slate-200 bg-slate-50/80 rounded-2xl px-4 py-3.5 focus:bg-white focus:ring-2 focus:ring-indigo-400" placeholder="輸入您的帳號" />
             </div>
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1">密碼</label>
               <input type="password" required value={loginPass} onChange={e => setLoginPass(e.target.value)}
-                className="w-full border border-slate-300 rounded-xl px-4 py-3 focus:ring-2 focus:ring-indigo-500" placeholder="輸入密碼" />
+                className="w-full border border-slate-200 bg-slate-50/80 rounded-2xl px-4 py-3.5 focus:bg-white focus:ring-2 focus:ring-indigo-400" placeholder="輸入密碼" />
             </div>
             {loginError && <div className="text-red-500 text-sm text-center font-medium bg-red-50 py-2 rounded-lg">{loginError}</div>}
             
-            <button type="submit" disabled={!firebaseUser} className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 rounded-xl transition-colors shadow-sm disabled:bg-slate-400">
+            <button type="submit" disabled={!firebaseUser} className="w-full bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-700 hover:to-violet-700 text-white font-bold py-3.5 rounded-2xl transition-all shadow-lg shadow-indigo-200 disabled:from-slate-400 disabled:to-slate-400 disabled:shadow-none">
               {firebaseUser ? '登入系統' : '連線中...'}
             </button>
           </form>
@@ -1523,57 +1937,74 @@ export default function MounjaroApp() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-100 py-6 px-4 font-sans text-slate-800">
+    <div className="wellness-shell relative min-h-screen overflow-hidden bg-[#f5f7ff] py-5 px-3 sm:py-7 sm:px-5 font-sans text-slate-800">
       <style>{`
-        .animation-fade-in { animation: fadeIn 0.3s ease-in-out; }
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+        .animation-fade-in { animation: fadeIn 0.35s ease-out; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes floatSoft { 0%, 100% { transform: translate3d(0, 0, 0); } 50% { transform: translate3d(0, -14px, 0); } }
         .hide-scrollbar::-webkit-scrollbar { display: none; }
         .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        .wellness-shell:before { content: ''; position: fixed; inset: 0; pointer-events: none; background-image: radial-gradient(circle at 1px 1px, rgba(99,102,241,.09) 1px, transparent 0); background-size: 28px 28px; mask-image: linear-gradient(to bottom, black, transparent 72%); }
+        .wellness-shell input, .wellness-shell select, .wellness-shell textarea { outline: none; transition: border-color .2s ease, box-shadow .2s ease, background-color .2s ease; }
+        .wellness-shell button { -webkit-tap-highlight-color: transparent; }
+        .wellness-shell .rounded-2xl.bg-white { box-shadow: 0 14px 40px rgba(74, 85, 140, .08); border-color: rgba(226, 232, 240, .8); }
+        @media (prefers-reduced-motion: reduce) { .animation-fade-in { animation: none; } .decorative-blob { animation: none !important; } }
       `}</style>
-      
-      <div className="max-w-3xl mx-auto space-y-6">
-        
-        <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 flex flex-col sm:flex-row items-center justify-between space-y-4 sm:space-y-0 text-center sm:text-left">
-          <div className="flex items-center space-x-4">
-            <div className="bg-indigo-50 p-3 rounded-xl inline-flex"><SyringeIcon /></div>
-            <div>
-              <h1 className="text-2xl font-bold text-slate-900 tracking-tight">猛健樂管理系統</h1>
-              <p className="text-slate-500 text-sm mt-1">哈囉，<strong>{appUser.username}</strong>！歡迎回來。</p>
+      <div className="decorative-blob pointer-events-none fixed -left-24 top-20 h-80 w-80 rounded-full bg-violet-300/25 blur-3xl" style={{ animation: 'floatSoft 8s ease-in-out infinite' }}></div>
+      <div className="decorative-blob pointer-events-none fixed -right-28 top-1/3 h-96 w-96 rounded-full bg-cyan-300/20 blur-3xl" style={{ animation: 'floatSoft 10s ease-in-out infinite reverse' }}></div>
+
+      <div className="relative z-10 max-w-5xl mx-auto space-y-5 sm:space-y-6">
+        <header className="relative overflow-hidden rounded-[2rem] bg-gradient-to-br from-indigo-600 via-violet-600 to-fuchsia-500 p-5 sm:p-7 text-white shadow-2xl shadow-indigo-200/70">
+          <div className="absolute -right-10 -top-16 h-44 w-44 rounded-full border-[28px] border-white/10"></div>
+          <div className="absolute bottom-0 right-1/4 h-24 w-24 translate-y-1/2 rounded-full bg-cyan-300/20 blur-xl"></div>
+          <div className="relative flex flex-col sm:flex-row items-start sm:items-center justify-between gap-5">
+            <div className="flex items-center gap-4">
+              <div className="inline-flex h-14 w-14 items-center justify-center rounded-2xl bg-white/15 backdrop-blur ring-1 ring-white/25 shadow-lg"><SyringeIcon className="text-white" /></div>
+              <div>
+                <p className="text-xs font-bold uppercase tracking-[0.2em] text-indigo-100">Mounjaro Wellness</p>
+                <h1 className="mt-1 text-2xl sm:text-3xl font-black tracking-tight">猛健樂健康日誌</h1>
+                <p className="mt-1 text-sm text-indigo-100">嗨，<strong className="text-white">{appUser.username}</strong>・{new Date().toLocaleDateString('zh-TW', { month: 'long', day: 'numeric', weekday: 'long' })}</p>
+              </div>
+            </div>
+            <div className="flex w-full sm:w-auto items-center gap-2">
+              <span className="flex-1 sm:flex-none rounded-full bg-emerald-300/20 px-3 py-2 text-center text-xs font-bold text-emerald-50 ring-1 ring-emerald-200/30">● 雲端同步</span>
+              <button onClick={handleLogout} className="rounded-full bg-white/15 px-4 py-2 text-sm font-bold text-white ring-1 ring-white/25 backdrop-blur hover:bg-white/25 transition-colors">登出</button>
             </div>
           </div>
-          <button onClick={handleLogout} className="px-4 py-2 text-sm text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg font-medium transition-colors">
-            登出
-          </button>
-        </div>
+        </header>
 
-        <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-1 flex overflow-x-auto hide-scrollbar">
-          <button onClick={() => setActiveTab('calculator')} className={`flex-1 whitespace-nowrap flex items-center justify-center py-3 px-4 text-sm font-medium rounded-lg transition-all ${activeTab === 'calculator' ? 'bg-indigo-50 text-indigo-700 shadow-sm' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-700'}`}>
-            <span className="mr-2 hidden sm:inline"><SyringeIcon /></span> 劑量換算
+        <nav className="sticky top-3 z-30 flex overflow-x-auto hide-scrollbar gap-1.5 rounded-2xl border border-white/80 bg-white/75 p-1.5 shadow-xl shadow-indigo-100/50 backdrop-blur-xl">
+          <button onClick={() => setActiveTab('calculator')} className={`flex-1 min-w-[94px] whitespace-nowrap rounded-xl px-3 py-3 text-sm font-bold transition-all ${activeTab === 'calculator' ? 'bg-gradient-to-r from-indigo-600 to-violet-600 text-white shadow-lg shadow-indigo-200' : 'text-slate-500 hover:bg-indigo-50 hover:text-indigo-700'}`}>
+            <span className="mr-1.5">🧮</span> 劑量計算
           </button>
-          <button onClick={() => setActiveTab('schedule')} className={`flex-1 whitespace-nowrap flex items-center justify-center py-3 px-4 text-sm font-medium rounded-lg transition-all ${activeTab === 'schedule' ? 'bg-indigo-50 text-indigo-700 shadow-sm' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-700'}`}>
-            <span className="mr-2"><CalendarIcon /></span> 計畫表
+          <button onClick={() => setActiveTab('schedule')} className={`flex-1 min-w-[86px] whitespace-nowrap rounded-xl px-3 py-3 text-sm font-bold transition-all ${activeTab === 'schedule' ? 'bg-gradient-to-r from-sky-500 to-cyan-500 text-white shadow-lg shadow-sky-200' : 'text-slate-500 hover:bg-sky-50 hover:text-sky-700'}`}>
+            <span className="mr-1.5">🗓️</span> 計畫表
           </button>
-          <button onClick={() => setActiveTab('log')} className={`flex-1 whitespace-nowrap flex items-center justify-center py-3 px-4 text-sm font-medium rounded-lg transition-all ${activeTab === 'log' ? 'bg-indigo-50 text-indigo-700 shadow-sm' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-700'}`}>
-            <span className="mr-2"><BookIcon /></span> 健康紀錄
+          <button onClick={() => setActiveTab('log')} className={`flex-1 min-w-[94px] whitespace-nowrap rounded-xl px-3 py-3 text-sm font-bold transition-all ${activeTab === 'log' ? 'bg-gradient-to-r from-emerald-500 to-teal-500 text-white shadow-lg shadow-emerald-200' : 'text-slate-500 hover:bg-emerald-50 hover:text-emerald-700'}`}>
+            <span className="mr-1.5">✨</span> 健康紀錄
           </button>
           {appUser.role === 'admin' && (
-            <button onClick={() => setActiveTab('admin')} className={`flex-1 whitespace-nowrap flex items-center justify-center py-3 px-4 text-sm font-bold rounded-lg transition-all ${activeTab === 'admin' ? 'bg-amber-100 text-amber-800 shadow-sm' : 'text-amber-600 hover:bg-amber-50'}`}>
-              <span className="mr-2"><UsersIcon /></span> 系統管理
+            <button onClick={() => setActiveTab('admin')} className={`flex-1 min-w-[94px] whitespace-nowrap rounded-xl px-3 py-3 text-sm font-bold transition-all ${activeTab === 'admin' ? 'bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow-lg shadow-amber-200' : 'text-amber-600 hover:bg-amber-50'}`}>
+              <span className="mr-1.5">👥</span> 系統管理
             </button>
           )}
-        </div>
+        </nav>
 
-        <div>
-          {activeTab === 'calculator' && <CalculatorView appUser={appUser} usersList={usersList} allSchedules={allSchedules} />}
+        <main className="pb-8">
+          {activeTab === 'calculator' && <CalculatorView appUser={appUser} usersList={usersList} allLogs={allLogs} allSchedules={allSchedules} sharingPlans={sharingPlans} inventory={doseInventories.find(item => item.id === appUser.username || item.username === appUser.username)} />}
           {activeTab === 'schedule' && (
             <ScheduleView
               appUser={appUser}
               userSchedule={allSchedules.find(item => item.id === appUser.username || item.username === appUser.username)}
+              allLogs={allLogs}
+              inventory={doseInventories.find(item => item.id === appUser.username || item.username === appUser.username)}
+              sharingPlans={sharingPlans}
+              allSchedules={allSchedules}
             />
           )}
           {activeTab === 'log' && <LogView appUser={appUser} allLogs={allLogs} />}
-          {activeTab === 'admin' && appUser.role === 'admin' && <AdminView appUser={appUser} usersList={usersList} allLogs={allLogs} allSchedules={allSchedules} />}
-        </div>
+          {activeTab === 'admin' && appUser.role === 'admin' && <AdminView appUser={appUser} usersList={usersList} allLogs={allLogs} allSchedules={allSchedules} sharingPlans={sharingPlans} />}
+        </main>
       </div>
     </div>
   );
