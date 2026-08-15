@@ -116,7 +116,7 @@ export default async function handler(req, res) {
   };
 
   try {
-    const geminiResponse = await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent', {
+    const geminiResponse = await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -153,7 +153,7 @@ export default async function handler(req, res) {
     }
 
     res.setHeader('Cache-Control', 'no-store');
-    return res.status(200).json({ advice, model: 'gemini-2.5-flash' });
+    return res.status(200).json({ advice, model: 'gemini-3.6-flash' });
   } catch (error) {
     console.error('Health advice error:', error);
     return res.status(500).json({ error: 'AI_REQUEST_FAILED' });
