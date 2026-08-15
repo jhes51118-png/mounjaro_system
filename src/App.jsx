@@ -86,6 +86,165 @@ const SESSION_KEY = 'mounjaroRememberedUser';
 const COMMON_SYMPTOMS = ['噁心', '嘔吐', '腹瀉', '便秘', '胃脹', '胃痛', '食慾下降', '頭暈', '頭痛', '疲倦', '口渴', '注射處不適'];
 const MOOD_OPTIONS = ['很好', '平穩', '普通', '低落', '焦慮', '煩躁', '疲憊'];
 
+const TECH_THEME_STYLES = `
+  :root { color-scheme: dark; }
+  body { margin: 0; background: #05070d; }
+  .tech-shell {
+    color-scheme: dark;
+    background:
+      radial-gradient(circle at 14% 8%, rgba(34, 211, 238, .10), transparent 30%),
+      radial-gradient(circle at 88% 34%, rgba(124, 58, 237, .13), transparent 34%),
+      linear-gradient(145deg, #05070d 0%, #080d18 46%, #060811 100%);
+    color: #cbd5e1;
+    isolation: isolate;
+  }
+  .tech-shell::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    z-index: -2;
+    pointer-events: none;
+    background-image:
+      linear-gradient(rgba(34, 211, 238, .035) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(34, 211, 238, .035) 1px, transparent 1px);
+    background-size: 38px 38px;
+    mask-image: linear-gradient(to bottom, black 0%, transparent 78%);
+  }
+  .tech-shell::after {
+    content: '';
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+    background: linear-gradient(180deg, transparent, rgba(2, 6, 23, .46));
+  }
+  .tech-shell input,
+  .tech-shell select,
+  .tech-shell textarea {
+    outline: none;
+    color: #e2e8f0 !important;
+    border-color: rgba(71, 85, 105, .58) !important;
+    background: rgba(5, 10, 20, .82) !important;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.025);
+    transition: border-color .2s ease, box-shadow .2s ease, background-color .2s ease;
+  }
+  .tech-shell input:focus,
+  .tech-shell select:focus,
+  .tech-shell textarea:focus {
+    border-color: rgba(34, 211, 238, .8) !important;
+    box-shadow: 0 0 0 3px rgba(34, 211, 238, .12), 0 0 22px rgba(34, 211, 238, .08) !important;
+    background: rgba(7, 14, 27, .96) !important;
+  }
+  .tech-shell input::placeholder,
+  .tech-shell textarea::placeholder { color: #536177 !important; }
+  .tech-shell select option { color: #e2e8f0; background: #0b1220; }
+  .tech-shell button { -webkit-tap-highlight-color: transparent; }
+  .tech-shell button:hover { filter: brightness(1.12); }
+  .tech-shell button:disabled { filter: saturate(.45); opacity: .58; }
+
+  .tech-shell .bg-white,
+  .tech-shell [class*="bg-white/"] {
+    background-color: rgba(12, 18, 31, .86) !important;
+    border-color: rgba(71, 85, 105, .34) !important;
+    box-shadow: 0 18px 50px rgba(0, 0, 0, .26), inset 0 1px 0 rgba(255,255,255,.025);
+  }
+  .tech-shell .bg-slate-50,
+  .tech-shell [class*="bg-slate-50/"] { background-color: rgba(15, 23, 42, .76) !important; }
+  .tech-shell .bg-slate-100,
+  .tech-shell [class*="bg-slate-100/"] { background-color: rgba(30, 41, 59, .72) !important; }
+  .tech-shell [class*="bg-slate-200"] { background-color: rgba(51, 65, 85, .58) !important; }
+  .tech-shell .bg-indigo-50,
+  .tech-shell [class*="bg-indigo-50/"] { background-color: rgba(49, 46, 129, .25) !important; }
+  .tech-shell .bg-indigo-100 { background-color: rgba(67, 56, 202, .24) !important; }
+  .tech-shell .bg-blue-50 { background-color: rgba(7, 89, 133, .24) !important; }
+  .tech-shell .bg-blue-100 { background-color: rgba(3, 105, 161, .25) !important; }
+  .tech-shell .bg-sky-50 { background-color: rgba(8, 145, 178, .18) !important; }
+  .tech-shell .bg-sky-100 { background-color: rgba(14, 116, 144, .25) !important; }
+  .tech-shell .bg-emerald-50,
+  .tech-shell [class*="bg-emerald-50/"] { background-color: rgba(6, 78, 59, .28) !important; }
+  .tech-shell .bg-emerald-100 { background-color: rgba(5, 150, 105, .22) !important; }
+  .tech-shell .bg-green-50 { background-color: rgba(20, 83, 45, .28) !important; }
+  .tech-shell .bg-amber-50 { background-color: rgba(120, 53, 15, .25) !important; }
+  .tech-shell .bg-amber-100 { background-color: rgba(146, 64, 14, .25) !important; }
+  .tech-shell .bg-red-50 { background-color: rgba(127, 29, 29, .24) !important; }
+  .tech-shell .bg-red-100 { background-color: rgba(153, 27, 27, .24) !important; }
+
+  .tech-shell [class*="from-indigo-50"],
+  .tech-shell [class*="from-emerald-50"],
+  .tech-shell [class*="from-sky-50"] {
+    background-image: linear-gradient(145deg, rgba(15, 23, 42, .96), rgba(8, 15, 28, .9)) !important;
+    border-color: rgba(34, 211, 238, .18) !important;
+    box-shadow: 0 18px 50px rgba(0,0,0,.24), inset 0 1px 0 rgba(255,255,255,.025);
+  }
+  .tech-shell [class*="from-violet-600"] {
+    background-image: linear-gradient(135deg, #151c35, #202059 58%, #123d4a) !important;
+    border-color: rgba(129, 140, 248, .34) !important;
+    box-shadow: 0 18px 45px rgba(30, 27, 75, .42) !important;
+  }
+  .tech-shell [class*="from-emerald-500"] {
+    background-image: linear-gradient(135deg, #0b2b2b, #064e3b 52%, #155e75) !important;
+    border-color: rgba(45, 212, 191, .30) !important;
+    box-shadow: 0 18px 45px rgba(6, 78, 59, .28) !important;
+  }
+
+  .tech-shell .text-slate-900 { color: #f8fafc !important; }
+  .tech-shell .text-slate-800 { color: #e2e8f0 !important; }
+  .tech-shell .text-slate-700 { color: #cbd5e1 !important; }
+  .tech-shell .text-slate-600 { color: #aebbcf !important; }
+  .tech-shell .text-slate-500 { color: #94a3b8 !important; }
+  .tech-shell .text-slate-400 { color: #718096 !important; }
+  .tech-shell .text-indigo-800,
+  .tech-shell .text-indigo-700,
+  .tech-shell .text-indigo-900 { color: #c7d2fe !important; }
+  .tech-shell .text-indigo-600,
+  .tech-shell .text-indigo-500 { color: #a5b4fc !important; }
+  .tech-shell .text-blue-800,
+  .tech-shell .text-blue-700 { color: #7dd3fc !important; }
+  .tech-shell .text-sky-800,
+  .tech-shell .text-sky-700,
+  .tech-shell .text-sky-600 { color: #7dd3fc !important; }
+  .tech-shell .text-emerald-800,
+  .tech-shell .text-emerald-700,
+  .tech-shell .text-emerald-900,
+  .tech-shell .text-green-600 { color: #6ee7b7 !important; }
+  .tech-shell .text-amber-800,
+  .tech-shell .text-amber-700,
+  .tech-shell .text-amber-600,
+  .tech-shell .text-amber-900 { color: #fcd34d !important; }
+  .tech-shell .text-red-800,
+  .tech-shell .text-red-700,
+  .tech-shell .text-red-600 { color: #fca5a5 !important; }
+
+  .tech-shell .border-slate-100,
+  .tech-shell .border-slate-200 { border-color: rgba(71, 85, 105, .34) !important; }
+  .tech-shell .border-slate-300 { border-color: rgba(100, 116, 139, .42) !important; }
+  .tech-shell .border-indigo-100,
+  .tech-shell .border-indigo-200 { border-color: rgba(129, 140, 248, .28) !important; }
+  .tech-shell .border-emerald-100,
+  .tech-shell .border-emerald-200 { border-color: rgba(52, 211, 153, .27) !important; }
+  .tech-shell .border-blue-100 { border-color: rgba(56, 189, 248, .25) !important; }
+  .tech-shell .border-amber-100,
+  .tech-shell .border-amber-200 { border-color: rgba(251, 191, 36, .28) !important; }
+  .tech-shell .border-red-200 { border-color: rgba(248, 113, 113, .3) !important; }
+  .tech-shell .shadow-indigo-200,
+  .tech-shell .shadow-indigo-100,
+  .tech-shell .shadow-sky-200,
+  .tech-shell .shadow-emerald-200,
+  .tech-shell .shadow-amber-200 { --tw-shadow-color: rgba(0,0,0,.32) !important; }
+  .tech-shell ::selection { color: #ecfeff; background: rgba(8, 145, 178, .68); }
+
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+  @keyframes floatSoft { 0%, 100% { transform: translate3d(0, 0, 0); } 50% { transform: translate3d(0, -14px, 0); } }
+  @keyframes pulseTech { 0%,100% { box-shadow: 0 0 0 0 rgba(34,211,238,.25); } 50% { box-shadow: 0 0 0 8px rgba(34,211,238,0); } }
+  .animation-fade-in { animation: fadeIn .35s ease-out; }
+  .tech-live { animation: pulseTech 2.4s ease-in-out infinite; }
+  .hide-scrollbar::-webkit-scrollbar { display: none; }
+  .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+  @media (prefers-reduced-motion: reduce) {
+    .animation-fade-in, .decorative-blob, .tech-live { animation: none !important; }
+  }
+`;
+
 const normalizeSymptoms = (symptoms) => Array.isArray(symptoms) ? symptoms.filter(Boolean) : [];
 const isInjectionLog = (log) => log?.recordType !== 'weight' && Number.isFinite(Number(log?.dose)) && Number(log.dose) > 0;
 const formatLogDate = (dateValue) => {
@@ -1882,14 +2041,16 @@ export default function MounjaroApp() {
 
   if (!firebaseUser || !usersLoaded || !sessionChecked) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-indigo-100 via-white to-cyan-100 flex items-center justify-center p-4 font-sans text-slate-800">
-        <div className="bg-white/85 backdrop-blur-xl rounded-3xl shadow-xl shadow-indigo-100 border border-white px-10 py-9 text-center">
+      <div className="tech-shell relative min-h-screen overflow-hidden flex items-center justify-center p-4 font-sans">
+        <style>{TECH_THEME_STYLES}</style>
+        <div className="pointer-events-none absolute left-1/2 top-1/2 h-80 w-80 -translate-x-1/2 -translate-y-1/2 rounded-full bg-cyan-500/10 blur-3xl"></div>
+        <div className="relative bg-white/85 backdrop-blur-xl rounded-3xl shadow-2xl border border-cyan-400/20 px-10 py-9 text-center">
           <div className="relative w-14 h-14 mx-auto mb-5">
-            <div className="absolute inset-0 rounded-full bg-indigo-200 animate-ping opacity-40"></div>
-            <div className="relative w-14 h-14 border-4 border-indigo-100 border-t-indigo-600 rounded-full animate-spin"></div>
+            <div className="absolute inset-0 rounded-full bg-cyan-400 animate-ping opacity-20"></div>
+            <div className="relative w-14 h-14 border-4 border-slate-700 border-t-cyan-400 rounded-full animate-spin"></div>
           </div>
-          <p className="font-black text-slate-800">正在為您準備健康資料</p>
-          <p className="text-xs text-slate-400 mt-2">連接雲端並恢復登入狀態...</p>
+          <p className="font-black text-slate-100">正在同步健康資料</p>
+          <p className="text-xs uppercase tracking-[0.18em] text-cyan-400 mt-2">Secure cloud link...</p>
         </div>
       </div>
     );
@@ -1897,33 +2058,34 @@ export default function MounjaroApp() {
 
   if (!appUser) {
     return (
-      <div className="relative min-h-screen overflow-hidden bg-gradient-to-br from-indigo-100 via-white to-emerald-100 flex items-center justify-center p-4 font-sans text-slate-800">
-        <div className="pointer-events-none absolute -left-24 top-16 h-72 w-72 rounded-full bg-violet-300/30 blur-3xl"></div>
-        <div className="pointer-events-none absolute -right-24 bottom-12 h-80 w-80 rounded-full bg-cyan-300/30 blur-3xl"></div>
-        <div className="relative max-w-md w-full bg-white/88 backdrop-blur-xl rounded-[2rem] shadow-2xl shadow-indigo-200/50 border border-white p-7 sm:p-9 animation-fade-in">
+      <div className="tech-shell relative min-h-screen overflow-hidden flex items-center justify-center p-4 font-sans">
+        <style>{TECH_THEME_STYLES}</style>
+        <div className="pointer-events-none absolute -left-24 top-16 h-72 w-72 rounded-full bg-violet-600/15 blur-3xl"></div>
+        <div className="pointer-events-none absolute -right-24 bottom-12 h-80 w-80 rounded-full bg-cyan-400/10 blur-3xl"></div>
+        <div className="relative max-w-md w-full bg-white/88 backdrop-blur-2xl rounded-[2rem] shadow-2xl border border-cyan-400/20 p-7 sm:p-9 animation-fade-in">
           <div className="text-center mb-8">
-            <div className="bg-gradient-to-br from-indigo-500 to-violet-600 w-20 h-20 rounded-3xl flex items-center justify-center mx-auto mb-5 text-white shadow-lg shadow-indigo-200 rotate-3">
+            <div className="tech-live bg-gradient-to-br from-cyan-400 via-sky-500 to-violet-600 w-20 h-20 rounded-3xl flex items-center justify-center mx-auto mb-5 text-white shadow-lg shadow-cyan-950/50 rotate-3 ring-1 ring-cyan-300/40">
               <SyringeIcon className="text-white" />
             </div>
-            <span className="inline-flex rounded-full bg-indigo-50 px-3 py-1 text-xs font-bold tracking-wide text-indigo-600 mb-3">MY WELLNESS JOURNEY</span>
-            <h1 className="text-3xl font-black text-slate-900 tracking-tight">猛健樂健康日誌</h1>
-            <p className="text-slate-500 text-sm mt-2">記錄每一步，讓改變變得看得見</p>
+            <span className="inline-flex rounded-full border border-cyan-400/20 bg-cyan-400/10 px-3 py-1 text-xs font-bold tracking-[0.2em] text-cyan-300 mb-3">HEALTH CONTROL OS</span>
+            <h1 className="text-3xl font-black text-slate-100 tracking-tight">猛健樂健康日誌</h1>
+            <p className="text-slate-400 text-sm mt-2">安全登入您的個人健康控制台</p>
           </div>
 
           <form onSubmit={handleLogin} className="space-y-5">
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">帳號</label>
+              <label className="block text-xs font-bold uppercase tracking-[0.16em] text-cyan-300 mb-2">帳號 ID</label>
               <input type="text" required value={loginUser} onChange={e => setLoginUser(e.target.value)}
                 className="w-full border border-slate-200 bg-slate-50/80 rounded-2xl px-4 py-3.5 focus:bg-white focus:ring-2 focus:ring-indigo-400" placeholder="輸入您的帳號" />
             </div>
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">密碼</label>
+              <label className="block text-xs font-bold uppercase tracking-[0.16em] text-cyan-300 mb-2">安全密碼</label>
               <input type="password" required value={loginPass} onChange={e => setLoginPass(e.target.value)}
                 className="w-full border border-slate-200 bg-slate-50/80 rounded-2xl px-4 py-3.5 focus:bg-white focus:ring-2 focus:ring-indigo-400" placeholder="輸入密碼" />
             </div>
             {loginError && <div className="text-red-500 text-sm text-center font-medium bg-red-50 py-2 rounded-lg">{loginError}</div>}
             
-            <button type="submit" disabled={!firebaseUser} className="w-full bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-700 hover:to-violet-700 text-white font-bold py-3.5 rounded-2xl transition-all shadow-lg shadow-indigo-200 disabled:from-slate-400 disabled:to-slate-400 disabled:shadow-none">
+            <button type="submit" disabled={!firebaseUser} className="w-full bg-gradient-to-r from-cyan-500 via-sky-500 to-violet-600 hover:from-cyan-400 hover:to-violet-500 text-white font-black tracking-wide py-3.5 rounded-2xl transition-all shadow-lg shadow-cyan-950/40 ring-1 ring-cyan-300/20 disabled:from-slate-600 disabled:to-slate-700 disabled:shadow-none">
               {firebaseUser ? '登入系統' : '連線中...'}
             </button>
           </form>
@@ -1937,55 +2099,45 @@ export default function MounjaroApp() {
   }
 
   return (
-    <div className="wellness-shell relative min-h-screen overflow-hidden bg-[#f5f7ff] py-5 px-3 sm:py-7 sm:px-5 font-sans text-slate-800">
-      <style>{`
-        .animation-fade-in { animation: fadeIn 0.35s ease-out; }
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
-        @keyframes floatSoft { 0%, 100% { transform: translate3d(0, 0, 0); } 50% { transform: translate3d(0, -14px, 0); } }
-        .hide-scrollbar::-webkit-scrollbar { display: none; }
-        .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
-        .wellness-shell:before { content: ''; position: fixed; inset: 0; pointer-events: none; background-image: radial-gradient(circle at 1px 1px, rgba(99,102,241,.09) 1px, transparent 0); background-size: 28px 28px; mask-image: linear-gradient(to bottom, black, transparent 72%); }
-        .wellness-shell input, .wellness-shell select, .wellness-shell textarea { outline: none; transition: border-color .2s ease, box-shadow .2s ease, background-color .2s ease; }
-        .wellness-shell button { -webkit-tap-highlight-color: transparent; }
-        .wellness-shell .rounded-2xl.bg-white { box-shadow: 0 14px 40px rgba(74, 85, 140, .08); border-color: rgba(226, 232, 240, .8); }
-        @media (prefers-reduced-motion: reduce) { .animation-fade-in { animation: none; } .decorative-blob { animation: none !important; } }
-      `}</style>
-      <div className="decorative-blob pointer-events-none fixed -left-24 top-20 h-80 w-80 rounded-full bg-violet-300/25 blur-3xl" style={{ animation: 'floatSoft 8s ease-in-out infinite' }}></div>
-      <div className="decorative-blob pointer-events-none fixed -right-28 top-1/3 h-96 w-96 rounded-full bg-cyan-300/20 blur-3xl" style={{ animation: 'floatSoft 10s ease-in-out infinite reverse' }}></div>
+    <div className="tech-shell wellness-shell relative min-h-screen overflow-hidden py-5 px-3 sm:py-7 sm:px-5 font-sans">
+      <style>{TECH_THEME_STYLES}</style>
+      <div className="decorative-blob pointer-events-none fixed -left-24 top-20 h-80 w-80 rounded-full bg-violet-600/10 blur-3xl" style={{ animation: 'floatSoft 8s ease-in-out infinite' }}></div>
+      <div className="decorative-blob pointer-events-none fixed -right-28 top-1/3 h-96 w-96 rounded-full bg-cyan-400/10 blur-3xl" style={{ animation: 'floatSoft 10s ease-in-out infinite reverse' }}></div>
 
       <div className="relative z-10 max-w-5xl mx-auto space-y-5 sm:space-y-6">
-        <header className="relative overflow-hidden rounded-[2rem] bg-gradient-to-br from-indigo-600 via-violet-600 to-fuchsia-500 p-5 sm:p-7 text-white shadow-2xl shadow-indigo-200/70">
-          <div className="absolute -right-10 -top-16 h-44 w-44 rounded-full border-[28px] border-white/10"></div>
-          <div className="absolute bottom-0 right-1/4 h-24 w-24 translate-y-1/2 rounded-full bg-cyan-300/20 blur-xl"></div>
+        <header className="relative overflow-hidden rounded-[2rem] border border-cyan-400/20 bg-gradient-to-br from-[#0b1220] via-[#10152a] to-[#091d25] p-5 sm:p-7 text-white shadow-2xl shadow-black/40">
+          <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-cyan-300/80 to-transparent"></div>
+          <div className="absolute -right-10 -top-16 h-44 w-44 rounded-full border-[28px] border-cyan-300/5"></div>
+          <div className="absolute bottom-0 right-1/4 h-24 w-24 translate-y-1/2 rounded-full bg-cyan-300/10 blur-xl"></div>
           <div className="relative flex flex-col sm:flex-row items-start sm:items-center justify-between gap-5">
             <div className="flex items-center gap-4">
-              <div className="inline-flex h-14 w-14 items-center justify-center rounded-2xl bg-white/15 backdrop-blur ring-1 ring-white/25 shadow-lg"><SyringeIcon className="text-white" /></div>
+              <div className="tech-live inline-flex h-14 w-14 items-center justify-center rounded-2xl bg-cyan-400/10 backdrop-blur ring-1 ring-cyan-300/30 shadow-lg shadow-cyan-950/40"><SyringeIcon className="text-cyan-300" /></div>
               <div>
-                <p className="text-xs font-bold uppercase tracking-[0.2em] text-indigo-100">Mounjaro Wellness</p>
+                <p className="text-xs font-bold uppercase tracking-[0.22em] text-cyan-300">Mounjaro Health OS</p>
                 <h1 className="mt-1 text-2xl sm:text-3xl font-black tracking-tight">猛健樂健康日誌</h1>
-                <p className="mt-1 text-sm text-indigo-100">嗨，<strong className="text-white">{appUser.username}</strong>・{new Date().toLocaleDateString('zh-TW', { month: 'long', day: 'numeric', weekday: 'long' })}</p>
+                <p className="mt-1 text-sm text-slate-400">使用者 <strong className="text-cyan-200">{appUser.username}</strong>・{new Date().toLocaleDateString('zh-TW', { month: 'long', day: 'numeric', weekday: 'long' })}</p>
               </div>
             </div>
             <div className="flex w-full sm:w-auto items-center gap-2">
-              <span className="flex-1 sm:flex-none rounded-full bg-emerald-300/20 px-3 py-2 text-center text-xs font-bold text-emerald-50 ring-1 ring-emerald-200/30">● 雲端同步</span>
-              <button onClick={handleLogout} className="rounded-full bg-white/15 px-4 py-2 text-sm font-bold text-white ring-1 ring-white/25 backdrop-blur hover:bg-white/25 transition-colors">登出</button>
+              <span className="flex-1 sm:flex-none rounded-full bg-emerald-400/10 px-3 py-2 text-center text-xs font-bold text-emerald-300 ring-1 ring-emerald-300/20"><span className="mr-1 text-emerald-400">●</span> CLOUD ONLINE</span>
+              <button onClick={handleLogout} className="rounded-full bg-slate-800/80 px-4 py-2 text-sm font-bold text-slate-200 ring-1 ring-slate-600/60 backdrop-blur hover:bg-slate-700 transition-colors">登出</button>
             </div>
           </div>
         </header>
 
-        <nav className="sticky top-3 z-30 flex overflow-x-auto hide-scrollbar gap-1.5 rounded-2xl border border-white/80 bg-white/75 p-1.5 shadow-xl shadow-indigo-100/50 backdrop-blur-xl">
-          <button onClick={() => setActiveTab('calculator')} className={`flex-1 min-w-[94px] whitespace-nowrap rounded-xl px-3 py-3 text-sm font-bold transition-all ${activeTab === 'calculator' ? 'bg-gradient-to-r from-indigo-600 to-violet-600 text-white shadow-lg shadow-indigo-200' : 'text-slate-500 hover:bg-indigo-50 hover:text-indigo-700'}`}>
-            <span className="mr-1.5">🧮</span> 劑量計算
+        <nav className="sticky top-3 z-30 flex overflow-x-auto hide-scrollbar gap-1.5 rounded-2xl border border-slate-700/70 bg-[#0a101d]/90 p-1.5 shadow-xl shadow-black/30 backdrop-blur-xl">
+          <button onClick={() => setActiveTab('calculator')} className={`flex-1 min-w-[94px] whitespace-nowrap rounded-xl px-3 py-3 text-sm font-bold transition-all ${activeTab === 'calculator' ? 'bg-gradient-to-r from-cyan-500 to-blue-600 text-white shadow-lg shadow-cyan-950/50 ring-1 ring-cyan-300/30' : 'text-slate-400 hover:bg-slate-800 hover:text-cyan-300'}`}>
+            <span className="mr-2 font-mono text-[10px] opacity-70">01</span>劑量計算
           </button>
-          <button onClick={() => setActiveTab('schedule')} className={`flex-1 min-w-[86px] whitespace-nowrap rounded-xl px-3 py-3 text-sm font-bold transition-all ${activeTab === 'schedule' ? 'bg-gradient-to-r from-sky-500 to-cyan-500 text-white shadow-lg shadow-sky-200' : 'text-slate-500 hover:bg-sky-50 hover:text-sky-700'}`}>
-            <span className="mr-1.5">🗓️</span> 計畫表
+          <button onClick={() => setActiveTab('schedule')} className={`flex-1 min-w-[86px] whitespace-nowrap rounded-xl px-3 py-3 text-sm font-bold transition-all ${activeTab === 'schedule' ? 'bg-gradient-to-r from-sky-500 to-cyan-500 text-white shadow-lg shadow-cyan-950/50 ring-1 ring-cyan-300/30' : 'text-slate-400 hover:bg-slate-800 hover:text-cyan-300'}`}>
+            <span className="mr-2 font-mono text-[10px] opacity-70">02</span>計畫表
           </button>
-          <button onClick={() => setActiveTab('log')} className={`flex-1 min-w-[94px] whitespace-nowrap rounded-xl px-3 py-3 text-sm font-bold transition-all ${activeTab === 'log' ? 'bg-gradient-to-r from-emerald-500 to-teal-500 text-white shadow-lg shadow-emerald-200' : 'text-slate-500 hover:bg-emerald-50 hover:text-emerald-700'}`}>
-            <span className="mr-1.5">✨</span> 健康紀錄
+          <button onClick={() => setActiveTab('log')} className={`flex-1 min-w-[94px] whitespace-nowrap rounded-xl px-3 py-3 text-sm font-bold transition-all ${activeTab === 'log' ? 'bg-gradient-to-r from-emerald-500 to-teal-500 text-white shadow-lg shadow-emerald-950/40 ring-1 ring-emerald-300/30' : 'text-slate-400 hover:bg-slate-800 hover:text-emerald-300'}`}>
+            <span className="mr-2 font-mono text-[10px] opacity-70">03</span>健康紀錄
           </button>
           {appUser.role === 'admin' && (
-            <button onClick={() => setActiveTab('admin')} className={`flex-1 min-w-[94px] whitespace-nowrap rounded-xl px-3 py-3 text-sm font-bold transition-all ${activeTab === 'admin' ? 'bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow-lg shadow-amber-200' : 'text-amber-600 hover:bg-amber-50'}`}>
-              <span className="mr-1.5">👥</span> 系統管理
+            <button onClick={() => setActiveTab('admin')} className={`flex-1 min-w-[94px] whitespace-nowrap rounded-xl px-3 py-3 text-sm font-bold transition-all ${activeTab === 'admin' ? 'bg-gradient-to-r from-amber-500 to-orange-600 text-white shadow-lg shadow-amber-950/40 ring-1 ring-amber-300/30' : 'text-amber-400 hover:bg-slate-800'}`}>
+              <span className="mr-2 font-mono text-[10px] opacity-70">04</span>系統管理
             </button>
           )}
         </nav>
