@@ -291,6 +291,113 @@ const calculateDoseExhaustion = (remainingMg, plannedEntries) => {
   return { exhausted: false, exhaustionEntry: null, remainingAfterPlan: Math.max(0, projectedRemaining) };
 };
 
+const roundHealthValue = (value, digits = 1) => Number.isFinite(value) ? Number(value.toFixed(digits)) : null;
+
+const buildHealthSnapshot = (logs, profile) => {
+  const weightLogs = logs
+    .filter(log => Number.isFinite(Number(log.weight)) && log.date)
+    .map(log => ({ date: log.date, weight: Number(log.weight) }))
+    .sort((a, b) => new Date(a.date) - new Date(b.date));
+  const injectionLogs = logs
+    .filter(isInjectionLog)
+    .map(log => ({ date: log.date, doseMg: Number(log.dose), symptoms: normalizeSymptoms(log.symptoms) }))
+    .sort((a, b) => new Date(a.date) - new Date(b.date));
+
+  if (weightLogs.length === 0) {
+    return {
+      status: 'insufficient', statusLabel: '等待體重資料', tone: 'slate',
+      headline: '新增體重紀錄後即可開始分析',
+      firstWeightKg: null, latestWeightKg: null, totalChangeKg: null,
+      weeklyLossKg: null, weeklyLossPercent: null, bmi: null, trendDays: 0,
+      weightEntryCount: 0, recentSymptoms: [], injectionLogs,
+      observations: ['至少需要 2 筆不同日期的體重紀錄，才能判讀變化速度。'],
+      suggestions: ['以相近的時間與測量條件記錄體重，會讓趨勢更可靠。']
+    };
+  }
+
+  const firstLog = weightLogs[0];
+  const latestLog = weightLogs[weightLogs.length - 1];
+  const latestDate = new Date(`${latestLog.date}T12:00:00`);
+  const trendStart = new Date(latestDate);
+  trendStart.setDate(trendStart.getDate() - 42);
+  let trendLogs = weightLogs.filter(log => new Date(`${log.date}T12:00:00`) >= trendStart);
+  if (trendLogs.length < 2) trendLogs = weightLogs;
+  const trendFirst = trendLogs[0];
+  const trendLast = trendLogs[trendLogs.length - 1];
+  const trendDays = Math.max(0, Math.round((new Date(`${trendLast.date}T12:00:00`) - new Date(`${trendFirst.date}T12:00:00`)) / 86400000));
+  const weeklyLossKg = trendDays >= 7 ? ((trendFirst.weight - trendLast.weight) / trendDays) * 7 : null;
+  const weeklyLossPercent = weeklyLossKg !== null && trendFirst.weight > 0 ? (weeklyLossKg / trendFirst.weight) * 100 : null;
+  const totalChangeKg = latestLog.weight - firstLog.weight;
+  const heightCm = Number(profile?.heightCm);
+  const age = Number(profile?.age);
+  const bmi = age >= 20 && heightCm >= 120 ? latestLog.weight / Math.pow(heightCm / 100, 2) : null;
+  const recentSymptomStart = new Date(latestDate);
+  recentSymptomStart.setDate(recentSymptomStart.getDate() - 30);
+  const recentSymptoms = [...new Set(injectionLogs
+    .filter(log => new Date(`${log.date}T12:00:00`) >= recentSymptomStart)
+    .flatMap(log => log.symptoms))];
+
+  let status = 'insufficient';
+  let statusLabel = '資料期間不足';
+  let tone = 'slate';
+  let headline = '再累積一些紀錄，趨勢會更可靠';
+  const observations = [];
+  const suggestions = [];
+
+  if (weeklyLossKg !== null) {
+    if (weeklyLossKg < -0.15) {
+      status = 'gaining'; statusLabel = '近期體重回升'; tone = 'amber';
+      headline = '體重短期回升不代表失敗，先看整體趨勢';
+      suggestions.push('確認最近幾次是否在相近時間與條件測量，再觀察 2–4 週的趨勢。');
+      suggestions.push('回顧睡眠、壓力、活動與飲食規律；若持續回升，可帶紀錄與醫療人員討論。');
+    } else if (weeklyLossKg < 0.15) {
+      status = 'stable'; statusLabel = '近期大致持平'; tone = 'sky';
+      headline = '平台期很常見，穩定記錄比單次數字更重要';
+      suggestions.push('保持規律飲食、睡眠與活動，先以 3–4 週趨勢評估，不必因短期持平否定努力。');
+      suggestions.push('若已持平數週且有疑問，請把體重與施打紀錄交給醫療人員評估，而不是自行調整劑量。');
+    } else if (weeklyLossKg < 0.45) {
+      status = 'slow'; statusLabel = '溫和下降'; tone = 'cyan';
+      headline = '速度較溫和，也可能是更容易維持的步調';
+      suggestions.push('繼續維持可長久執行的飲食、活動與睡眠習慣，不需要追求每週都快速下降。');
+      suggestions.push('用腰圍、體力與飲食規律一起觀察，不要只用單一體重判斷成效。');
+    } else if (weeklyLossKg <= 0.9 && weeklyLossPercent <= 1) {
+      status = 'steady'; statusLabel = '漸進下降'; tone = 'emerald';
+      headline = '目前呈現穩定、漸進的下降趨勢';
+      suggestions.push('做得很好，請維持足夠水分、規律進食與蛋白質來源。');
+      suggestions.push('每週安排肌力或阻力活動，有助於維持肌肉與日常功能。');
+    } else {
+      status = 'fast'; statusLabel = '下降速度偏快'; tone = 'red';
+      headline = '近期下降偏快，請優先確認營養、水分與身體狀況';
+      suggestions.push('確保能正常進食與補充水分，並留意疲倦、頭暈、持續腸胃不適等訊號。');
+      suggestions.push('請儘快把近期體重、劑量與症狀紀錄提供給醫療人員評估，不要自行更改劑量。');
+    }
+    observations.push(`近 ${trendDays} 天平均每週${weeklyLossKg >= 0 ? '下降' : '增加'}約 ${Math.abs(weeklyLossKg).toFixed(2)} kg。`);
+  } else {
+    suggestions.push('請累積至少相隔 7 天的體重紀錄，再判讀每週變化速度。');
+  }
+
+  observations.push(`從第一筆到最新一筆共${totalChangeKg <= 0 ? '下降' : '增加'} ${Math.abs(totalChangeKg).toFixed(1)} kg。`);
+  if (bmi !== null) {
+    const bmiLabel = bmi < 18.5 ? '偏低' : bmi < 25 ? '健康範圍' : bmi < 30 ? '過重範圍' : '肥胖範圍';
+    observations.push(`目前成人 BMI 篩檢值約 ${bmi.toFixed(1)}（${bmiLabel}），僅供趨勢參考。`);
+  }
+  const latestInjection = injectionLogs[injectionLogs.length - 1];
+  if (latestInjection) observations.push(`最近一次紀錄劑量為 ${latestInjection.doseMg} mg；體重趨勢不能單獨用來決定劑量。`);
+  if (recentSymptoms.length > 0) observations.push(`近 30 天曾記錄：${recentSymptoms.join('、')}。`);
+
+  return {
+    status, statusLabel, tone, headline,
+    firstWeightKg: firstLog.weight,
+    latestWeightKg: latestLog.weight,
+    totalChangeKg: roundHealthValue(totalChangeKg),
+    weeklyLossKg: roundHealthValue(weeklyLossKg, 2),
+    weeklyLossPercent: roundHealthValue(weeklyLossPercent, 2),
+    bmi: roundHealthValue(bmi), trendDays,
+    weightEntryCount: weightLogs.length,
+    recentSymptoms, injectionLogs, observations: observations.slice(0, 4), suggestions
+  };
+};
+
 function LogExtraDetails({ log, noteClassName = 'bg-slate-50' }) {
   const symptoms = normalizeSymptoms(log.symptoms);
   return (
@@ -1304,6 +1411,219 @@ function ScheduleView({ appUser, userSchedule, allLogs, inventory, sharingPlans,
   );
 }
 
+function HealthInsightPanel({ appUser, logs }) {
+  const [profile, setProfile] = useState(null);
+  const [heightCm, setHeightCm] = useState('');
+  const [age, setAge] = useState('');
+  const [profileMessage, setProfileMessage] = useState('');
+  const [isSavingProfile, setIsSavingProfile] = useState(false);
+  const [aiAdvice, setAiAdvice] = useState(null);
+  const [aiMessage, setAiMessage] = useState('');
+  const [isAskingAi, setIsAskingAi] = useState(false);
+  const logFingerprint = logs.map(log => `${log.id}:${log.date}:${log.weight}:${log.dose}:${(log.symptoms || []).join(',')}`).join('|');
+
+  useEffect(() => {
+    if (!db || !appUser?.username) return undefined;
+    const profileRef = doc(db, 'mounjaroProfiles', appUser.username);
+    return onSnapshot(profileRef, (snapshot) => {
+      setProfile(snapshot.exists() ? { id: snapshot.id, ...snapshot.data() } : null);
+    }, error => console.error('Fetch own profile error:', error));
+  }, [appUser?.username]);
+
+  useEffect(() => {
+    setHeightCm(profile?.heightCm ? String(profile.heightCm) : '');
+    setAge(profile?.age ? String(profile.age) : '');
+  }, [profile?.heightCm, profile?.age]);
+
+  useEffect(() => {
+    setAiAdvice(null);
+    setAiMessage('');
+  }, [logFingerprint, profile?.updatedAt]);
+
+  const effectiveProfile = {
+    heightCm: Number(heightCm) || Number(profile?.heightCm) || null,
+    age: Number(age) || Number(profile?.age) || null
+  };
+  const snapshot = buildHealthSnapshot(logs, effectiveProfile);
+  const latestInjection = snapshot.injectionLogs[snapshot.injectionLogs.length - 1];
+  const toneStyles = {
+    slate: 'border-slate-600/50 bg-slate-800/60 text-slate-200',
+    amber: 'border-amber-400/30 bg-amber-400/10 text-amber-200',
+    sky: 'border-sky-400/30 bg-sky-400/10 text-sky-200',
+    cyan: 'border-cyan-400/30 bg-cyan-400/10 text-cyan-200',
+    emerald: 'border-emerald-400/30 bg-emerald-400/10 text-emerald-200',
+    red: 'border-red-400/30 bg-red-400/10 text-red-200'
+  };
+
+  const handleSaveProfile = async (event) => {
+    event.preventDefault();
+    const parsedHeight = Number(heightCm);
+    const parsedAge = Number(age);
+    if (!Number.isFinite(parsedHeight) || parsedHeight < 120 || parsedHeight > 230 || !Number.isInteger(parsedAge) || parsedAge < 18 || parsedAge > 100) {
+      setProfileMessage('請輸入 120–230 公分的身高，以及 18–100 歲的整數年齡。');
+      return;
+    }
+    setIsSavingProfile(true);
+    setProfileMessage('');
+    try {
+      await setDoc(doc(db, 'mounjaroProfiles', appUser.username), {
+        username: appUser.username,
+        heightCm: parsedHeight,
+        age: parsedAge,
+        updatedAt: new Date().toISOString()
+      }, { merge: true });
+      setProfileMessage('個人健康資料已安全同步到雲端。');
+    } catch (error) {
+      console.error('儲存個人健康資料失敗:', error);
+      setProfileMessage('儲存失敗，請稍後再試。');
+    }
+    setIsSavingProfile(false);
+  };
+
+  const handleAskAi = async () => {
+    if (snapshot.weightEntryCount < 2 || isAskingAi) return;
+    setIsAskingAi(true);
+    setAiAdvice(null);
+    setAiMessage('');
+    try {
+      const response = await fetch('/api/health-advice', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          profile: effectiveProfile,
+          metrics: {
+            status: snapshot.status,
+            firstWeightKg: snapshot.firstWeightKg,
+            latestWeightKg: snapshot.latestWeightKg,
+            totalChangeKg: snapshot.totalChangeKg,
+            weeklyLossKg: snapshot.weeklyLossKg,
+            weeklyLossPercent: snapshot.weeklyLossPercent,
+            bmi: snapshot.bmi,
+            trendDays: snapshot.trendDays
+          },
+          recentDoses: snapshot.injectionLogs.slice(-12).map(item => ({ date: item.date, doseMg: item.doseMg })),
+          recentSymptoms: snapshot.recentSymptoms
+        })
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        setAiMessage(result.error === 'AI_NOT_CONFIGURED'
+          ? 'Gemini 尚未連接；目前顯示的是本機循證智慧分析，所有核心判讀仍可正常使用。'
+          : 'Gemini 暫時無法連線；已保留本機循證分析結果。');
+      } else {
+        setAiAdvice(result.advice);
+        setAiMessage('Gemini 已依照去識別化的趨勢資料產生個人化鼓勵。');
+      }
+    } catch (error) {
+      console.error('AI 健康分析失敗:', error);
+      setAiMessage('Gemini 暫時無法連線；已保留本機循證分析結果。');
+    }
+    setIsAskingAi(false);
+  };
+
+  return (
+    <section className="overflow-hidden rounded-3xl border border-cyan-400/20 bg-gradient-to-br from-[#0c1625] via-[#0a111f] to-[#11152b] shadow-2xl shadow-black/30">
+      <div className="border-b border-cyan-400/10 p-5 sm:p-6">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="rounded-full border border-cyan-300/20 bg-cyan-400/10 px-3 py-1 font-mono text-[10px] font-bold tracking-[0.18em] text-cyan-300">SMART HEALTH INSIGHT</span>
+              <span className={`rounded-full border px-3 py-1 text-xs font-bold ${toneStyles[snapshot.tone]}`}>{snapshot.statusLabel}</span>
+            </div>
+            <h2 className="mt-3 text-xl font-black text-slate-100">智慧體重趨勢與鼓勵</h2>
+            <p className="mt-1 text-sm text-slate-400">依體重、實際劑量、症狀與個人資料提供非診斷性分析。</p>
+          </div>
+          <div className="rounded-2xl border border-amber-400/20 bg-amber-400/10 px-4 py-3 text-xs leading-relaxed text-amber-200 sm:max-w-xs">
+            AI 不會指示增減藥。任何劑量調整都必須由開藥醫療人員評估。
+          </div>
+        </div>
+      </div>
+
+      <div className="space-y-5 p-5 sm:p-6">
+        <form onSubmit={handleSaveProfile} className="rounded-2xl border border-slate-700/60 bg-slate-950/30 p-4">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-end">
+            <div className="flex-1">
+              <label className="mb-1 block text-xs font-bold uppercase tracking-wider text-slate-400">身高（cm）</label>
+              <input type="number" min="120" max="230" step="0.1" value={heightCm} onChange={event => { setHeightCm(event.target.value); setProfileMessage(''); }} placeholder="例如 168" className="w-full rounded-xl border px-3 py-2.5" />
+            </div>
+            <div className="flex-1">
+              <label className="mb-1 block text-xs font-bold uppercase tracking-wider text-slate-400">年齡</label>
+              <input type="number" min="18" max="100" step="1" value={age} onChange={event => { setAge(event.target.value); setProfileMessage(''); }} placeholder="例如 35" className="w-full rounded-xl border px-3 py-2.5" />
+            </div>
+            <button type="submit" disabled={isSavingProfile} className="rounded-xl bg-cyan-500 px-5 py-2.5 text-sm font-black text-slate-950 hover:bg-cyan-400 disabled:bg-slate-600">
+              {isSavingProfile ? '同步中...' : profile ? '更新資料' : '建立資料'}
+            </button>
+          </div>
+          <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-xs">
+            <p className="text-slate-500">限成人資料；BMI 僅是篩檢值，不能單獨判斷健康狀況。</p>
+            {profileMessage && <p className={profileMessage.includes('失敗') || profileMessage.includes('請輸入') ? 'text-red-300' : 'text-emerald-300'}>{profileMessage}</p>}
+          </div>
+        </form>
+
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <div className="rounded-2xl border border-slate-700/60 bg-slate-950/35 p-4">
+            <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500">最新體重</p>
+            <p className="mt-2 text-xl font-black text-slate-100">{snapshot.latestWeightKg ?? '—'} <small className="text-xs text-slate-500">kg</small></p>
+          </div>
+          <div className="rounded-2xl border border-slate-700/60 bg-slate-950/35 p-4">
+            <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500">每週變化</p>
+            <p className="mt-2 text-xl font-black text-cyan-300">{snapshot.weeklyLossKg === null ? '—' : `${snapshot.weeklyLossKg >= 0 ? '−' : '+'}${Math.abs(snapshot.weeklyLossKg)}`} <small className="text-xs text-slate-500">kg</small></p>
+          </div>
+          <div className="rounded-2xl border border-slate-700/60 bg-slate-950/35 p-4">
+            <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500">成人 BMI</p>
+            <p className="mt-2 text-xl font-black text-violet-300">{snapshot.bmi ?? '—'}</p>
+          </div>
+          <div className="rounded-2xl border border-slate-700/60 bg-slate-950/35 p-4">
+            <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500">最近劑量</p>
+            <p className="mt-2 text-xl font-black text-emerald-300">{latestInjection?.doseMg ?? '—'} <small className="text-xs text-slate-500">mg</small></p>
+          </div>
+        </div>
+
+        <div className={`rounded-2xl border p-4 ${toneStyles[snapshot.tone]}`}>
+          <p className="text-lg font-black">{snapshot.headline}</p>
+          <div className="mt-3 grid gap-4 md:grid-cols-2">
+            <div>
+              <p className="mb-2 text-xs font-black uppercase tracking-wider opacity-60">系統觀察</p>
+              <ul className="space-y-2 text-sm leading-relaxed">
+                {snapshot.observations.map(item => <li key={item} className="flex gap-2"><span>›</span><span>{item}</span></li>)}
+              </ul>
+            </div>
+            <div>
+              <p className="mb-2 text-xs font-black uppercase tracking-wider opacity-60">現在可以做的事</p>
+              <ul className="space-y-2 text-sm leading-relaxed">
+                {snapshot.suggestions.map(item => <li key={item} className="flex gap-2"><span>✓</span><span>{item}</span></li>)}
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        {aiAdvice && (
+          <div className="rounded-2xl border border-violet-400/25 bg-violet-400/10 p-4 text-violet-100">
+            <p className="font-black">{aiAdvice.encouragement}</p>
+            {aiAdvice.observations?.length > 0 && <ul className="mt-3 space-y-1 text-sm text-violet-200">{aiAdvice.observations.map(item => <li key={item}>• {item}</li>)}</ul>}
+            {aiAdvice.suggestions?.length > 0 && <ul className="mt-3 space-y-1 text-sm text-cyan-100">{aiAdvice.suggestions.map(item => <li key={item}>→ {item}</li>)}</ul>}
+          </div>
+        )}
+
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="text-xs leading-relaxed text-slate-500">
+            依據：<a href="https://www.cdc.gov/healthy-weight-growth/losing-weight/index.html" target="_blank" rel="noreferrer" className="text-cyan-400 hover:underline">CDC 漸進減重</a>、<a href="https://www.cdc.gov/bmi/adult-calculator/bmi-categories.html" target="_blank" rel="noreferrer" className="text-cyan-400 hover:underline">成人 BMI</a>、<a href="https://pi.lilly.com/us/mounjaro-uspi.pdf?s=" target="_blank" rel="noreferrer" className="text-cyan-400 hover:underline">Mounjaro 處方資訊</a>
+            <p className="mt-1">按下 Gemini 按鈕後，僅會傳送去識別化的身高、年齡、趨勢數值、劑量日期與症狀摘要；不傳送帳號、密碼、姓名或自由文字筆記。</p>
+          </div>
+          <button type="button" onClick={handleAskAi} disabled={snapshot.weightEntryCount < 2 || isAskingAi} className="shrink-0 rounded-xl bg-gradient-to-r from-violet-600 to-cyan-500 px-5 py-3 text-sm font-black text-white shadow-lg shadow-cyan-950/30 disabled:from-slate-700 disabled:to-slate-700">
+            {isAskingAi ? 'AI 分析中...' : '請 Gemini 個人化鼓勵'}
+          </button>
+        </div>
+        {aiMessage && <p className="rounded-xl border border-slate-700 bg-slate-950/40 px-4 py-3 text-xs text-slate-400">{aiMessage}</p>}
+
+        <p className="rounded-xl border border-red-400/20 bg-red-400/10 px-4 py-3 text-xs leading-relaxed text-red-200">
+          若出現持續或嚴重腹痛、反覆嘔吐／腹瀉、無法進食補水、明顯脫水或其他令人擔心的症狀，請儘快聯絡醫療人員；緊急狀況請立即就醫。
+        </p>
+      </div>
+    </section>
+  );
+}
+
 function LogView({ appUser, allLogs }) {
   const [recordType, setRecordType] = useState('injection');
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
@@ -1422,6 +1742,8 @@ function LogView({ appUser, allLogs }) {
 
   return (
     <div className="space-y-6 animation-fade-in">
+      <HealthInsightPanel appUser={appUser} logs={myLogs} />
+
       {/* 📊 顯示個人趨勢圖表 */}
       <TrendChart logs={myLogs} />
 
@@ -1693,6 +2015,7 @@ function AdminView({ appUser, usersList, allLogs, allSchedules, sharingPlans }) 
         deleteDoc(doc(db, 'mounjaroUsers', targetUser.id)),
         deleteDoc(doc(db, 'mounjaroSchedules', targetUser.username)),
         deleteDoc(doc(db, 'mounjaroDoseInventories', targetUser.username)),
+        deleteDoc(doc(db, 'mounjaroProfiles', targetUser.username)),
         ...logsToDelete.map(log => deleteDoc(doc(db, 'mounjaroLogs', log.id))),
         ...sharingPlansToDelete.map(plan => deleteDoc(doc(db, 'mounjaroSharingPlans', plan.id)))
       ]);
