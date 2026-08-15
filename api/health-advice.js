@@ -126,7 +126,7 @@ export default async function handler(req, res) {
         contents: [{ parts: [{ text: prompt }] }],
         generationConfig: {
           temperature: 0.35,
-          maxOutputTokens: 700,
+          maxOutputTokens: 2048,
           responseMimeType: 'application/json',
           responseSchema
         }
@@ -139,7 +139,10 @@ export default async function handler(req, res) {
     }
 
     const result = await geminiResponse.json();
-    const responseText = result?.candidates?.[0]?.content?.parts?.[0]?.text;
+    const responseText = result?.candidates?.[0]?.content?.parts
+      ?.filter(part => !part.thought && typeof part.text === 'string')
+      .map(part => part.text)
+      .join('');
     const parsed = JSON.parse(responseText || '{}');
     const cleanedEncouragement = cleanText(parsed.encouragement, 220);
     const advice = {
