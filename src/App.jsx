@@ -79,6 +79,19 @@ const ChevronLeftIcon = () => (
   </svg>
 );
 
+const ComicBeagleIcon = ({ className = '' }) => (
+  <svg viewBox="0 0 96 96" role="img" aria-label="開心的小獵犬" className={className} fill="none" xmlns="http://www.w3.org/2000/svg">
+    <path d="M31 27c-12-11-24-5-22 9 1 10 11 17 23 15" fill="#252525" stroke="#252525" strokeWidth="4" strokeLinejoin="round"/>
+    <path d="M65 27c12-11 24-5 22 9-1 10-11 17-23 15" fill="#252525" stroke="#252525" strokeWidth="4" strokeLinejoin="round"/>
+    <path d="M24 44c0-20 11-32 24-32s24 12 24 32c0 22-10 38-24 38S24 66 24 44Z" fill="#FFFDF7" stroke="#252525" strokeWidth="4"/>
+    <ellipse cx="39" cy="43" rx="3" ry="5" fill="#252525"/>
+    <ellipse cx="57" cy="43" rx="3" ry="5" fill="#252525"/>
+    <ellipse cx="48" cy="56" rx="7" ry="5" fill="#252525"/>
+    <path d="M39 64c5 6 13 6 18 0" stroke="#252525" strokeWidth="3" strokeLinecap="round"/>
+    <path d="M69 72c8-2 13 1 16 6" stroke="#D94A43" strokeWidth="5" strokeLinecap="round"/>
+  </svg>
+);
+
 const PEN_OPTIONS = [2.5, 5, 7.5, 10, 12.5, 15]; 
 const COMMON_DOSES = [2.5, 3.0, 3.5, 4.0, 4.5, 5.0, 6.0, 7.0, 8.0, 9.0, 10]; 
 const STANDARD_TITRATION = [2.5, 5, 7.5, 10, 12.5, 15];
@@ -86,162 +99,166 @@ const SESSION_KEY = 'mounjaroRememberedUser';
 const COMMON_SYMPTOMS = ['噁心', '嘔吐', '腹瀉', '便秘', '胃脹', '胃痛', '食慾下降', '頭暈', '頭痛', '疲倦', '口渴', '注射處不適'];
 const MOOD_OPTIONS = ['很好', '平穩', '普通', '低落', '焦慮', '煩躁', '疲憊'];
 
-const TECH_THEME_STYLES = `
-  :root { color-scheme: dark; }
-  body { margin: 0; background: #05070d; }
-  .tech-shell {
-    color-scheme: dark;
-    background:
-      radial-gradient(circle at 14% 8%, rgba(34, 211, 238, .10), transparent 30%),
-      radial-gradient(circle at 88% 34%, rgba(124, 58, 237, .13), transparent 34%),
-      linear-gradient(145deg, #05070d 0%, #080d18 46%, #060811 100%);
-    color: #cbd5e1;
+const COMIC_THEME_STYLES = `
+  :root { color-scheme: light; }
+  body { margin: 0; background: #f7f0df; }
+  .comic-shell {
+    color-scheme: light;
+    color: #343434;
     isolation: isolate;
+    background:
+      radial-gradient(circle at 10% 8%, rgba(246, 209, 95, .45), transparent 22%),
+      radial-gradient(circle at 92% 24%, rgba(125, 185, 232, .32), transparent 24%),
+      linear-gradient(160deg, #fffaf0 0%, #f8f2e4 54%, #f1f7f4 100%);
   }
-  .tech-shell::before {
+  .comic-shell::before {
     content: '';
     position: fixed;
     inset: 0;
     z-index: -2;
     pointer-events: none;
-    background-image:
-      linear-gradient(rgba(34, 211, 238, .035) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(34, 211, 238, .035) 1px, transparent 1px);
-    background-size: 38px 38px;
-    mask-image: linear-gradient(to bottom, black 0%, transparent 78%);
+    opacity: .32;
+    background-image: radial-gradient(#6a6a6a 0.7px, transparent 0.7px);
+    background-size: 18px 18px;
   }
-  .tech-shell::after {
+  .comic-shell::after {
     content: '';
     position: fixed;
     inset: 0;
     z-index: -1;
     pointer-events: none;
-    background: linear-gradient(180deg, transparent, rgba(2, 6, 23, .46));
+    background: linear-gradient(180deg, rgba(255,255,255,.18), rgba(255,250,240,.38));
   }
-  .tech-shell input,
-  .tech-shell select,
-  .tech-shell textarea {
+  .comic-shell h1,
+  .comic-shell h2,
+  .comic-shell h3 { letter-spacing: -.02em; }
+  .comic-shell input,
+  .comic-shell select,
+  .comic-shell textarea {
     outline: none;
-    color: #e2e8f0 !important;
-    border-color: rgba(71, 85, 105, .58) !important;
-    background: rgba(5, 10, 20, .82) !important;
-    box-shadow: inset 0 1px 0 rgba(255,255,255,.025);
-    transition: border-color .2s ease, box-shadow .2s ease, background-color .2s ease;
+    color: #2c2c2c !important;
+    border-color: #cfc8b9 !important;
+    background: #fffef9 !important;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.8);
+    transition: border-color .18s ease, box-shadow .18s ease, transform .18s ease;
   }
-  .tech-shell input:focus,
-  .tech-shell select:focus,
-  .tech-shell textarea:focus {
-    border-color: rgba(34, 211, 238, .8) !important;
-    box-shadow: 0 0 0 3px rgba(34, 211, 238, .12), 0 0 22px rgba(34, 211, 238, .08) !important;
-    background: rgba(7, 14, 27, .96) !important;
+  .comic-shell input:focus,
+  .comic-shell select:focus,
+  .comic-shell textarea:focus {
+    border-color: #4f8fc2 !important;
+    box-shadow: 0 0 0 3px rgba(125,185,232,.25), 3px 3px 0 rgba(36,36,36,.08) !important;
+    background: #fff !important;
   }
-  .tech-shell input::placeholder,
-  .tech-shell textarea::placeholder { color: #536177 !important; }
-  .tech-shell select option { color: #e2e8f0; background: #0b1220; }
-  .tech-shell button { -webkit-tap-highlight-color: transparent; }
-  .tech-shell button:hover { filter: brightness(1.12); }
-  .tech-shell button:disabled { filter: saturate(.45); opacity: .58; }
+  .comic-shell input::placeholder,
+  .comic-shell textarea::placeholder { color: #9c978d !important; }
+  .comic-shell select option { color: #2c2c2c; background: #fffef9; }
+  .comic-shell button { -webkit-tap-highlight-color: transparent; }
+  .comic-shell button:hover:not(:disabled) { filter: saturate(1.04); }
+  .comic-shell button:active:not(:disabled) { transform: translateY(1px); }
+  .comic-shell button:disabled { filter: saturate(.45); opacity: .58; }
 
-  .tech-shell .bg-white,
-  .tech-shell [class*="bg-white/"] {
-    background-color: rgba(12, 18, 31, .86) !important;
-    border-color: rgba(71, 85, 105, .34) !important;
-    box-shadow: 0 18px 50px rgba(0, 0, 0, .26), inset 0 1px 0 rgba(255,255,255,.025);
+  .comic-shell .bg-white,
+  .comic-shell [class*="bg-white/"] {
+    background-color: rgba(255,253,247,.94) !important;
+    border-color: rgba(67,63,56,.16) !important;
+    box-shadow: 4px 5px 0 rgba(43,43,43,.08), 0 12px 28px rgba(85,72,48,.07);
   }
-  .tech-shell .bg-slate-50,
-  .tech-shell [class*="bg-slate-50/"] { background-color: rgba(15, 23, 42, .76) !important; }
-  .tech-shell .bg-slate-100,
-  .tech-shell [class*="bg-slate-100/"] { background-color: rgba(30, 41, 59, .72) !important; }
-  .tech-shell [class*="bg-slate-200"] { background-color: rgba(51, 65, 85, .58) !important; }
-  .tech-shell .bg-indigo-50,
-  .tech-shell [class*="bg-indigo-50/"] { background-color: rgba(49, 46, 129, .25) !important; }
-  .tech-shell .bg-indigo-100 { background-color: rgba(67, 56, 202, .24) !important; }
-  .tech-shell .bg-blue-50 { background-color: rgba(7, 89, 133, .24) !important; }
-  .tech-shell .bg-blue-100 { background-color: rgba(3, 105, 161, .25) !important; }
-  .tech-shell .bg-sky-50 { background-color: rgba(8, 145, 178, .18) !important; }
-  .tech-shell .bg-sky-100 { background-color: rgba(14, 116, 144, .25) !important; }
-  .tech-shell .bg-emerald-50,
-  .tech-shell [class*="bg-emerald-50/"] { background-color: rgba(6, 78, 59, .28) !important; }
-  .tech-shell .bg-emerald-100 { background-color: rgba(5, 150, 105, .22) !important; }
-  .tech-shell .bg-green-50 { background-color: rgba(20, 83, 45, .28) !important; }
-  .tech-shell .bg-amber-50 { background-color: rgba(120, 53, 15, .25) !important; }
-  .tech-shell .bg-amber-100 { background-color: rgba(146, 64, 14, .25) !important; }
-  .tech-shell .bg-red-50 { background-color: rgba(127, 29, 29, .24) !important; }
-  .tech-shell .bg-red-100 { background-color: rgba(153, 27, 27, .24) !important; }
+  .comic-shell .bg-slate-50,
+  .comic-shell [class*="bg-slate-50/"] { background-color: #fbf8f0 !important; }
+  .comic-shell .bg-slate-100,
+  .comic-shell [class*="bg-slate-100/"] { background-color: #f0ece2 !important; }
+  .comic-shell .bg-slate-200 { background-color: #e6e0d4 !important; }
+  .comic-shell .bg-indigo-50,
+  .comic-shell [class*="bg-indigo-50/"] { background-color: #eef5fb !important; }
+  .comic-shell .bg-indigo-100 { background-color: #dcecf8 !important; }
+  .comic-shell .bg-blue-50 { background-color: #eef7fc !important; }
+  .comic-shell .bg-blue-100 { background-color: #d9edf9 !important; }
+  .comic-shell .bg-sky-50 { background-color: #eff8fc !important; }
+  .comic-shell .bg-sky-100 { background-color: #dff1fa !important; }
+  .comic-shell .bg-emerald-50,
+  .comic-shell [class*="bg-emerald-50/"] { background-color: #eff8f0 !important; }
+  .comic-shell .bg-emerald-100 { background-color: #dbefdc !important; }
+  .comic-shell .bg-green-50 { background-color: #f0f8ed !important; }
+  .comic-shell .bg-amber-50 { background-color: #fff8dc !important; }
+  .comic-shell .bg-amber-100 { background-color: #fcebb3 !important; }
+  .comic-shell .bg-red-50 { background-color: #fff1ee !important; }
+  .comic-shell .bg-red-100 { background-color: #f9ddd8 !important; }
 
-  .tech-shell [class*="from-indigo-50"],
-  .tech-shell [class*="from-emerald-50"],
-  .tech-shell [class*="from-sky-50"] {
-    background-image: linear-gradient(145deg, rgba(15, 23, 42, .96), rgba(8, 15, 28, .9)) !important;
-    border-color: rgba(34, 211, 238, .18) !important;
-    box-shadow: 0 18px 50px rgba(0,0,0,.24), inset 0 1px 0 rgba(255,255,255,.025);
+  .comic-shell [class*="from-indigo-50"],
+  .comic-shell [class*="from-emerald-50"],
+  .comic-shell [class*="from-sky-50"] {
+    background-image: linear-gradient(145deg, #fffef9, #f3f8f4) !important;
+    border-color: rgba(67,63,56,.16) !important;
+    box-shadow: 4px 5px 0 rgba(43,43,43,.07), 0 12px 28px rgba(85,72,48,.06);
   }
-  .tech-shell [class*="from-violet-600"] {
-    background-image: linear-gradient(135deg, #151c35, #202059 58%, #123d4a) !important;
-    border-color: rgba(129, 140, 248, .34) !important;
-    box-shadow: 0 18px 45px rgba(30, 27, 75, .42) !important;
+  .comic-shell [class*="from-violet-600"] {
+    background-image: linear-gradient(135deg, #6c78bd, #588fc8) !important;
+    border-color: #474f8e !important;
+    box-shadow: 4px 5px 0 rgba(43,43,43,.12) !important;
   }
-  .tech-shell [class*="from-emerald-500"] {
-    background-image: linear-gradient(135deg, #0b2b2b, #064e3b 52%, #155e75) !important;
-    border-color: rgba(45, 212, 191, .30) !important;
-    box-shadow: 0 18px 45px rgba(6, 78, 59, .28) !important;
+  .comic-shell [class*="from-emerald-500"] {
+    background-image: linear-gradient(135deg, #6eaf79, #4f9b8b) !important;
+    border-color: #477a59 !important;
+    box-shadow: 4px 5px 0 rgba(43,43,43,.12) !important;
   }
 
-  .tech-shell .text-slate-900 { color: #f8fafc !important; }
-  .tech-shell .text-slate-800 { color: #e2e8f0 !important; }
-  .tech-shell .text-slate-700 { color: #cbd5e1 !important; }
-  .tech-shell .text-slate-600 { color: #aebbcf !important; }
-  .tech-shell .text-slate-500 { color: #94a3b8 !important; }
-  .tech-shell .text-slate-400 { color: #718096 !important; }
-  .tech-shell .text-indigo-800,
-  .tech-shell .text-indigo-700,
-  .tech-shell .text-indigo-900 { color: #c7d2fe !important; }
-  .tech-shell .text-indigo-600,
-  .tech-shell .text-indigo-500 { color: #a5b4fc !important; }
-  .tech-shell .text-blue-800,
-  .tech-shell .text-blue-700 { color: #7dd3fc !important; }
-  .tech-shell .text-sky-800,
-  .tech-shell .text-sky-700,
-  .tech-shell .text-sky-600 { color: #7dd3fc !important; }
-  .tech-shell .text-emerald-800,
-  .tech-shell .text-emerald-700,
-  .tech-shell .text-emerald-900,
-  .tech-shell .text-green-600 { color: #6ee7b7 !important; }
-  .tech-shell .text-amber-800,
-  .tech-shell .text-amber-700,
-  .tech-shell .text-amber-600,
-  .tech-shell .text-amber-900 { color: #fcd34d !important; }
-  .tech-shell .text-red-800,
-  .tech-shell .text-red-700,
-  .tech-shell .text-red-600 { color: #fca5a5 !important; }
+  .comic-shell .text-slate-900 { color: #252525 !important; }
+  .comic-shell .text-slate-800 { color: #303030 !important; }
+  .comic-shell .text-slate-700 { color: #454545 !important; }
+  .comic-shell .text-slate-600 { color: #5e5e5e !important; }
+  .comic-shell .text-slate-500 { color: #73706a !important; }
+  .comic-shell .text-slate-400 { color: #8c877e !important; }
+  .comic-shell .text-indigo-800,
+  .comic-shell .text-indigo-700,
+  .comic-shell .text-indigo-900 { color: #405f96 !important; }
+  .comic-shell .text-indigo-600,
+  .comic-shell .text-indigo-500 { color: #4d76ad !important; }
+  .comic-shell .text-blue-800,
+  .comic-shell .text-blue-700 { color: #3975a5 !important; }
+  .comic-shell .text-sky-800,
+  .comic-shell .text-sky-700,
+  .comic-shell .text-sky-600 { color: #347ca7 !important; }
+  .comic-shell .text-emerald-800,
+  .comic-shell .text-emerald-700,
+  .comic-shell .text-emerald-900,
+  .comic-shell .text-green-600 { color: #3f8056 !important; }
+  .comic-shell .text-amber-800,
+  .comic-shell .text-amber-700,
+  .comic-shell .text-amber-600,
+  .comic-shell .text-amber-900 { color: #8b6816 !important; }
+  .comic-shell .text-red-800,
+  .comic-shell .text-red-700,
+  .comic-shell .text-red-600 { color: #bd453e !important; }
 
-  .tech-shell .border-slate-100,
-  .tech-shell .border-slate-200 { border-color: rgba(71, 85, 105, .34) !important; }
-  .tech-shell .border-slate-300 { border-color: rgba(100, 116, 139, .42) !important; }
-  .tech-shell .border-indigo-100,
-  .tech-shell .border-indigo-200 { border-color: rgba(129, 140, 248, .28) !important; }
-  .tech-shell .border-emerald-100,
-  .tech-shell .border-emerald-200 { border-color: rgba(52, 211, 153, .27) !important; }
-  .tech-shell .border-blue-100 { border-color: rgba(56, 189, 248, .25) !important; }
-  .tech-shell .border-amber-100,
-  .tech-shell .border-amber-200 { border-color: rgba(251, 191, 36, .28) !important; }
-  .tech-shell .border-red-200 { border-color: rgba(248, 113, 113, .3) !important; }
-  .tech-shell .shadow-indigo-200,
-  .tech-shell .shadow-indigo-100,
-  .tech-shell .shadow-sky-200,
-  .tech-shell .shadow-emerald-200,
-  .tech-shell .shadow-amber-200 { --tw-shadow-color: rgba(0,0,0,.32) !important; }
-  .tech-shell ::selection { color: #ecfeff; background: rgba(8, 145, 178, .68); }
+  .comic-shell .border-slate-100,
+  .comic-shell .border-slate-200 { border-color: #e2dccf !important; }
+  .comic-shell .border-slate-300 { border-color: #cbc4b7 !important; }
+  .comic-shell .border-indigo-100,
+  .comic-shell .border-indigo-200 { border-color: #c7dced !important; }
+  .comic-shell .border-emerald-100,
+  .comic-shell .border-emerald-200 { border-color: #c9e3ca !important; }
+  .comic-shell .border-blue-100 { border-color: #c8e1f0 !important; }
+  .comic-shell .border-amber-100,
+  .comic-shell .border-amber-200 { border-color: #edd998 !important; }
+  .comic-shell .border-red-200 { border-color: #efc4bd !important; }
+  .comic-shell .shadow-indigo-200,
+  .comic-shell .shadow-indigo-100,
+  .comic-shell .shadow-sky-200,
+  .comic-shell .shadow-emerald-200,
+  .comic-shell .shadow-amber-200 { --tw-shadow-color: rgba(69,62,49,.15) !important; }
+  .comic-shell ::selection { color: #252525; background: #f6d15f; }
+  .comic-card { border: 2px solid #343434; box-shadow: 5px 6px 0 rgba(52,52,52,.12); }
+  .comic-sticker { border: 2px solid #343434; box-shadow: 3px 3px 0 rgba(52,52,52,.13); }
 
   @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
-  @keyframes floatSoft { 0%, 100% { transform: translate3d(0, 0, 0); } 50% { transform: translate3d(0, -14px, 0); } }
-  @keyframes pulseTech { 0%,100% { box-shadow: 0 0 0 0 rgba(34,211,238,.25); } 50% { box-shadow: 0 0 0 8px rgba(34,211,238,0); } }
+  @keyframes floatSoft { 0%, 100% { transform: translate3d(0, 0, 0) rotate(-2deg); } 50% { transform: translate3d(0, -8px, 0) rotate(2deg); } }
+  @keyframes pulseComic { 0%,100% { box-shadow: 3px 3px 0 rgba(52,52,52,.12); } 50% { box-shadow: 5px 6px 0 rgba(52,52,52,.08); } }
   .animation-fade-in { animation: fadeIn .35s ease-out; }
-  .tech-live { animation: pulseTech 2.4s ease-in-out infinite; }
+  .comic-live { animation: pulseComic 2.8s ease-in-out infinite; }
   .hide-scrollbar::-webkit-scrollbar { display: none; }
   .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
   @media (prefers-reduced-motion: reduce) {
-    .animation-fade-in, .decorative-blob, .tech-live { animation: none !important; }
+    .animation-fade-in, .decorative-blob, .comic-live { animation: none !important; }
   }
 `;
 
@@ -1447,12 +1464,12 @@ function HealthInsightPanel({ appUser, logs }) {
   const snapshot = buildHealthSnapshot(logs, effectiveProfile);
   const latestInjection = snapshot.injectionLogs[snapshot.injectionLogs.length - 1];
   const toneStyles = {
-    slate: 'border-slate-600/50 bg-slate-800/60 text-slate-200',
-    amber: 'border-amber-400/30 bg-amber-400/10 text-amber-200',
-    sky: 'border-sky-400/30 bg-sky-400/10 text-sky-200',
-    cyan: 'border-cyan-400/30 bg-cyan-400/10 text-cyan-200',
-    emerald: 'border-emerald-400/30 bg-emerald-400/10 text-emerald-200',
-    red: 'border-red-400/30 bg-red-400/10 text-red-200'
+    slate: 'border-slate-300 bg-white text-slate-700',
+    amber: 'border-amber-300 bg-amber-50 text-amber-900',
+    sky: 'border-sky-300 bg-sky-50 text-sky-800',
+    cyan: 'border-cyan-300 bg-cyan-50 text-cyan-800',
+    emerald: 'border-emerald-300 bg-emerald-50 text-emerald-800',
+    red: 'border-red-300 bg-red-50 text-red-800'
   };
 
   const handleSaveProfile = async (event) => {
@@ -1522,60 +1539,60 @@ function HealthInsightPanel({ appUser, logs }) {
   };
 
   return (
-    <section className="overflow-hidden rounded-3xl border border-cyan-400/20 bg-gradient-to-br from-[#0c1625] via-[#0a111f] to-[#11152b] shadow-2xl shadow-black/30">
-      <div className="border-b border-cyan-400/10 p-5 sm:p-6">
+    <section className="comic-card overflow-hidden rounded-3xl bg-[#fffdf7]">
+      <div className="border-b-2 border-[#343434] bg-gradient-to-r from-[#e9f5fb] via-[#fffdf7] to-[#fff2bf] p-5 sm:p-6">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <div className="flex items-center gap-2">
-              <span className="rounded-full border border-cyan-300/20 bg-cyan-400/10 px-3 py-1 font-mono text-[10px] font-bold tracking-[0.18em] text-cyan-300">SMART HEALTH INSIGHT</span>
+              <span className="comic-sticker rounded-full bg-[#7db9e8] px-3 py-1 text-[10px] font-black tracking-[0.12em] text-[#252525]">健康小幫手</span>
               <span className={`rounded-full border px-3 py-1 text-xs font-bold ${toneStyles[snapshot.tone]}`}>{snapshot.statusLabel}</span>
             </div>
-            <h2 className="mt-3 text-xl font-black text-slate-100">智慧體重趨勢與鼓勵</h2>
-            <p className="mt-1 text-sm text-slate-400">依體重、實際劑量、症狀與個人資料提供非診斷性分析。</p>
+            <h2 className="mt-3 text-xl font-black text-slate-900">智慧體重趨勢與鼓勵</h2>
+            <p className="mt-1 text-sm text-slate-600">把每次紀錄串成清楚趨勢，陪你穩穩前進。</p>
           </div>
-          <div className="rounded-2xl border border-amber-400/20 bg-amber-400/10 px-4 py-3 text-xs leading-relaxed text-amber-200 sm:max-w-xs">
+          <div className="rounded-2xl border-2 border-[#343434] bg-[#fff4bd] px-4 py-3 text-xs leading-relaxed text-[#5f4c19] shadow-[3px_3px_0_rgba(52,52,52,.1)] sm:max-w-xs">
             AI 不會指示增減藥。任何劑量調整都必須由開藥醫療人員評估。
           </div>
         </div>
       </div>
 
       <div className="space-y-5 p-5 sm:p-6">
-        <form onSubmit={handleSaveProfile} className="rounded-2xl border border-slate-700/60 bg-slate-950/30 p-4">
+        <form onSubmit={handleSaveProfile} className="rounded-2xl border border-slate-200 bg-[#fbf8f0] p-4">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-end">
             <div className="flex-1">
-              <label className="mb-1 block text-xs font-bold uppercase tracking-wider text-slate-400">身高（cm）</label>
+              <label className="mb-1 block text-xs font-bold text-slate-600">身高（cm）</label>
               <input type="number" min="120" max="230" step="0.1" value={heightCm} onChange={event => { setHeightCm(event.target.value); setProfileMessage(''); }} placeholder="例如 168" className="w-full rounded-xl border px-3 py-2.5" />
             </div>
             <div className="flex-1">
-              <label className="mb-1 block text-xs font-bold uppercase tracking-wider text-slate-400">年齡</label>
+              <label className="mb-1 block text-xs font-bold text-slate-600">年齡</label>
               <input type="number" min="18" max="100" step="1" value={age} onChange={event => { setAge(event.target.value); setProfileMessage(''); }} placeholder="例如 35" className="w-full rounded-xl border px-3 py-2.5" />
             </div>
-            <button type="submit" disabled={isSavingProfile} className="rounded-xl bg-cyan-500 px-5 py-2.5 text-sm font-black text-slate-950 hover:bg-cyan-400 disabled:bg-slate-600">
+            <button type="submit" disabled={isSavingProfile} className="rounded-xl border-2 border-[#343434] bg-[#7db9e8] px-5 py-2.5 text-sm font-black text-[#252525] shadow-[3px_3px_0_rgba(52,52,52,.12)] hover:bg-[#92c7ed] disabled:bg-slate-200">
               {isSavingProfile ? '同步中...' : profile ? '更新資料' : '建立資料'}
             </button>
           </div>
           <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-xs">
             <p className="text-slate-500">限成人資料；BMI 僅是篩檢值，不能單獨判斷健康狀況。</p>
-            {profileMessage && <p className={profileMessage.includes('失敗') || profileMessage.includes('請輸入') ? 'text-red-300' : 'text-emerald-300'}>{profileMessage}</p>}
+            {profileMessage && <p className={profileMessage.includes('失敗') || profileMessage.includes('請輸入') ? 'text-red-600' : 'text-emerald-700'}>{profileMessage}</p>}
           </div>
         </form>
 
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <div className="rounded-2xl border border-slate-700/60 bg-slate-950/35 p-4">
+          <div className="rounded-2xl border border-slate-200 bg-white p-4">
             <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500">最新體重</p>
-            <p className="mt-2 text-xl font-black text-slate-100">{snapshot.latestWeightKg ?? '—'} <small className="text-xs text-slate-500">kg</small></p>
+            <p className="mt-2 text-xl font-black text-slate-900">{snapshot.latestWeightKg ?? '—'} <small className="text-xs text-slate-500">kg</small></p>
           </div>
-          <div className="rounded-2xl border border-slate-700/60 bg-slate-950/35 p-4">
+          <div className="rounded-2xl border border-slate-200 bg-[#eef7fc] p-4">
             <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500">每週變化</p>
-            <p className="mt-2 text-xl font-black text-cyan-300">{snapshot.weeklyLossKg === null ? '—' : `${snapshot.weeklyLossKg >= 0 ? '−' : '+'}${Math.abs(snapshot.weeklyLossKg)}`} <small className="text-xs text-slate-500">kg</small></p>
+            <p className="mt-2 text-xl font-black text-sky-700">{snapshot.weeklyLossKg === null ? '—' : `${snapshot.weeklyLossKg >= 0 ? '−' : '+'}${Math.abs(snapshot.weeklyLossKg)}`} <small className="text-xs text-slate-500">kg</small></p>
           </div>
-          <div className="rounded-2xl border border-slate-700/60 bg-slate-950/35 p-4">
+          <div className="rounded-2xl border border-slate-200 bg-[#fff8dc] p-4">
             <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500">成人 BMI</p>
-            <p className="mt-2 text-xl font-black text-violet-300">{snapshot.bmi ?? '—'}</p>
+            <p className="mt-2 text-xl font-black text-amber-700">{snapshot.bmi ?? '—'}</p>
           </div>
-          <div className="rounded-2xl border border-slate-700/60 bg-slate-950/35 p-4">
+          <div className="rounded-2xl border border-slate-200 bg-[#eff8f0] p-4">
             <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500">最近劑量</p>
-            <p className="mt-2 text-xl font-black text-emerald-300">{latestInjection?.doseMg ?? '—'} <small className="text-xs text-slate-500">mg</small></p>
+            <p className="mt-2 text-xl font-black text-emerald-700">{latestInjection?.doseMg ?? '—'} <small className="text-xs text-slate-500">mg</small></p>
           </div>
         </div>
 
@@ -1598,25 +1615,25 @@ function HealthInsightPanel({ appUser, logs }) {
         </div>
 
         {aiAdvice && (
-          <div className="rounded-2xl border border-violet-400/25 bg-violet-400/10 p-4 text-violet-100">
+          <div className="rounded-2xl border-2 border-[#343434] bg-[#f1edff] p-4 text-slate-800 shadow-[3px_3px_0_rgba(52,52,52,.1)]">
             <p className="font-black">{aiAdvice.encouragement}</p>
-            {aiAdvice.observations?.length > 0 && <ul className="mt-3 space-y-1 text-sm text-violet-200">{aiAdvice.observations.map(item => <li key={item}>• {item}</li>)}</ul>}
-            {aiAdvice.suggestions?.length > 0 && <ul className="mt-3 space-y-1 text-sm text-cyan-100">{aiAdvice.suggestions.map(item => <li key={item}>→ {item}</li>)}</ul>}
+            {aiAdvice.observations?.length > 0 && <ul className="mt-3 space-y-1 text-sm text-slate-700">{aiAdvice.observations.map(item => <li key={item}>• {item}</li>)}</ul>}
+            {aiAdvice.suggestions?.length > 0 && <ul className="mt-3 space-y-1 text-sm text-sky-800">{aiAdvice.suggestions.map(item => <li key={item}>→ {item}</li>)}</ul>}
           </div>
         )}
 
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="text-xs leading-relaxed text-slate-500">
-            依據：<a href="https://www.cdc.gov/healthy-weight-growth/losing-weight/index.html" target="_blank" rel="noreferrer" className="text-cyan-400 hover:underline">CDC 漸進減重</a>、<a href="https://www.cdc.gov/bmi/adult-calculator/bmi-categories.html" target="_blank" rel="noreferrer" className="text-cyan-400 hover:underline">成人 BMI</a>、<a href="https://pi.lilly.com/us/mounjaro-uspi.pdf?s=" target="_blank" rel="noreferrer" className="text-cyan-400 hover:underline">Mounjaro 處方資訊</a>
+            依據：<a href="https://www.cdc.gov/healthy-weight-growth/losing-weight/index.html" target="_blank" rel="noreferrer" className="font-bold text-sky-700 hover:underline">CDC 漸進減重</a>、<a href="https://www.cdc.gov/bmi/adult-calculator/bmi-categories.html" target="_blank" rel="noreferrer" className="font-bold text-sky-700 hover:underline">成人 BMI</a>、<a href="https://pi.lilly.com/us/mounjaro-uspi.pdf?s=" target="_blank" rel="noreferrer" className="font-bold text-sky-700 hover:underline">Mounjaro 處方資訊</a>
             <p className="mt-1">按下 Gemini 按鈕後，僅會傳送去識別化的身高、年齡、趨勢數值、劑量日期與症狀摘要；不傳送帳號、密碼、姓名或自由文字筆記。</p>
           </div>
-          <button type="button" onClick={handleAskAi} disabled={snapshot.weightEntryCount < 2 || isAskingAi} className="shrink-0 rounded-xl bg-gradient-to-r from-violet-600 to-cyan-500 px-5 py-3 text-sm font-black text-white shadow-lg shadow-cyan-950/30 disabled:from-slate-700 disabled:to-slate-700">
+          <button type="button" onClick={handleAskAi} disabled={snapshot.weightEntryCount < 2 || isAskingAi} className="shrink-0 rounded-xl border-2 border-[#343434] bg-[#d94a43] px-5 py-3 text-sm font-black text-white shadow-[4px_4px_0_rgba(52,52,52,.14)] hover:bg-[#c83f39] disabled:bg-slate-200 disabled:text-slate-500">
             {isAskingAi ? 'AI 分析中...' : '請 Gemini 個人化鼓勵'}
           </button>
         </div>
-        {aiMessage && <p className="rounded-xl border border-slate-700 bg-slate-950/40 px-4 py-3 text-xs text-slate-400">{aiMessage}</p>}
+        {aiMessage && <p className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs text-slate-600">{aiMessage}</p>}
 
-        <p className="rounded-xl border border-red-400/20 bg-red-400/10 px-4 py-3 text-xs leading-relaxed text-red-200">
+        <p className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-xs leading-relaxed text-red-700">
           若出現持續或嚴重腹痛、反覆嘔吐／腹瀉、無法進食補水、明顯脫水或其他令人擔心的症狀，請儘快聯絡醫療人員；緊急狀況請立即就醫。
         </p>
       </div>
@@ -2364,16 +2381,12 @@ export default function MounjaroApp() {
 
   if (!firebaseUser || !usersLoaded || !sessionChecked) {
     return (
-      <div className="tech-shell relative min-h-screen overflow-hidden flex items-center justify-center p-4 font-sans">
-        <style>{TECH_THEME_STYLES}</style>
-        <div className="pointer-events-none absolute left-1/2 top-1/2 h-80 w-80 -translate-x-1/2 -translate-y-1/2 rounded-full bg-cyan-500/10 blur-3xl"></div>
-        <div className="relative bg-white/85 backdrop-blur-xl rounded-3xl shadow-2xl border border-cyan-400/20 px-10 py-9 text-center">
-          <div className="relative w-14 h-14 mx-auto mb-5">
-            <div className="absolute inset-0 rounded-full bg-cyan-400 animate-ping opacity-20"></div>
-            <div className="relative w-14 h-14 border-4 border-slate-700 border-t-cyan-400 rounded-full animate-spin"></div>
-          </div>
-          <p className="font-black text-slate-100">正在同步健康資料</p>
-          <p className="text-xs uppercase tracking-[0.18em] text-cyan-400 mt-2">Secure cloud link...</p>
+      <div className="comic-shell relative min-h-screen overflow-hidden flex items-center justify-center p-4 font-sans">
+        <style>{COMIC_THEME_STYLES}</style>
+        <div className="relative comic-card bg-[#fffdf7] rounded-[2rem] px-10 py-9 text-center">
+          <ComicBeagleIcon className="comic-live mx-auto mb-4 h-20 w-20" />
+          <p className="font-black text-slate-900">正在整理今天的健康日誌</p>
+          <p className="mt-2 text-xs font-bold tracking-[0.12em] text-sky-700">資料同步中，馬上就好…</p>
         </div>
       </div>
     );
@@ -2381,39 +2394,39 @@ export default function MounjaroApp() {
 
   if (!appUser) {
     return (
-      <div className="tech-shell relative min-h-screen overflow-hidden flex items-center justify-center p-4 font-sans">
-        <style>{TECH_THEME_STYLES}</style>
-        <div className="pointer-events-none absolute -left-24 top-16 h-72 w-72 rounded-full bg-violet-600/15 blur-3xl"></div>
-        <div className="pointer-events-none absolute -right-24 bottom-12 h-80 w-80 rounded-full bg-cyan-400/10 blur-3xl"></div>
-        <div className="relative max-w-md w-full bg-white/88 backdrop-blur-2xl rounded-[2rem] shadow-2xl border border-cyan-400/20 p-7 sm:p-9 animation-fade-in">
+      <div className="comic-shell relative min-h-screen overflow-hidden flex items-center justify-center p-4 font-sans">
+        <style>{COMIC_THEME_STYLES}</style>
+        <div className="decorative-blob pointer-events-none absolute -left-20 top-16 h-56 w-56 rounded-full bg-[#f6d15f]/35 blur-2xl"></div>
+        <div className="decorative-blob pointer-events-none absolute -right-20 bottom-12 h-64 w-64 rounded-full bg-[#7db9e8]/25 blur-2xl"></div>
+        <div className="comic-card relative max-w-md w-full bg-[#fffdf7] rounded-[2rem] p-7 sm:p-9 animation-fade-in">
           <div className="text-center mb-8">
-            <div className="tech-live bg-gradient-to-br from-cyan-400 via-sky-500 to-violet-600 w-20 h-20 rounded-3xl flex items-center justify-center mx-auto mb-5 text-white shadow-lg shadow-cyan-950/50 rotate-3 ring-1 ring-cyan-300/40">
-              <SyringeIcon className="text-white" />
+            <div className="comic-live relative mx-auto mb-5 flex h-24 w-24 items-center justify-center rounded-full border-2 border-[#343434] bg-[#fff4bd]">
+              <ComicBeagleIcon className="h-20 w-20" />
             </div>
-            <span className="inline-flex rounded-full border border-cyan-400/20 bg-cyan-400/10 px-3 py-1 text-xs font-bold tracking-[0.2em] text-cyan-300 mb-3">HEALTH CONTROL OS</span>
-            <h1 className="text-3xl font-black text-slate-100 tracking-tight">猛健樂健康日誌</h1>
-            <p className="text-slate-400 text-sm mt-2">安全登入您的個人健康控制台</p>
+            <span className="comic-sticker mb-3 inline-flex -rotate-2 rounded-full bg-[#7db9e8] px-3 py-1 text-xs font-black tracking-[0.12em] text-[#252525]">MY WELLNESS DIARY</span>
+            <h1 className="text-3xl font-black text-slate-900 tracking-tight">猛健樂健康日誌</h1>
+            <p className="mt-2 text-sm text-slate-600">每天記一點，慢慢看見自己的進步</p>
           </div>
 
           <form onSubmit={handleLogin} className="space-y-5">
             <div>
-              <label className="block text-xs font-bold uppercase tracking-[0.16em] text-cyan-300 mb-2">帳號 ID</label>
+              <label className="mb-2 block text-sm font-black text-slate-700">帳號</label>
               <input type="text" required value={loginUser} onChange={e => setLoginUser(e.target.value)}
                 className="w-full border border-slate-200 bg-slate-50/80 rounded-2xl px-4 py-3.5 focus:bg-white focus:ring-2 focus:ring-indigo-400" placeholder="輸入您的帳號" />
             </div>
             <div>
-              <label className="block text-xs font-bold uppercase tracking-[0.16em] text-cyan-300 mb-2">安全密碼</label>
+              <label className="mb-2 block text-sm font-black text-slate-700">密碼</label>
               <input type="password" required value={loginPass} onChange={e => setLoginPass(e.target.value)}
                 className="w-full border border-slate-200 bg-slate-50/80 rounded-2xl px-4 py-3.5 focus:bg-white focus:ring-2 focus:ring-indigo-400" placeholder="輸入密碼" />
             </div>
             {loginError && <div className="text-red-500 text-sm text-center font-medium bg-red-50 py-2 rounded-lg">{loginError}</div>}
             
-            <button type="submit" disabled={!firebaseUser} className="w-full bg-gradient-to-r from-cyan-500 via-sky-500 to-violet-600 hover:from-cyan-400 hover:to-violet-500 text-white font-black tracking-wide py-3.5 rounded-2xl transition-all shadow-lg shadow-cyan-950/40 ring-1 ring-cyan-300/20 disabled:from-slate-600 disabled:to-slate-700 disabled:shadow-none">
-              {firebaseUser ? '登入系統' : '連線中...'}
+            <button type="submit" disabled={!firebaseUser} className="w-full rounded-2xl border-2 border-[#343434] bg-[#d94a43] py-3.5 font-black tracking-wide text-white shadow-[4px_5px_0_rgba(52,52,52,.16)] transition-all hover:bg-[#c83f39] disabled:bg-slate-200 disabled:text-slate-500 disabled:shadow-none">
+              {firebaseUser ? '開始記錄' : '連線中…'}
             </button>
           </form>
 
-          <div className="mt-6 text-center text-xs text-slate-400">
+          <div className="mt-6 text-center text-xs text-slate-500">
             {usersList.length === 0 && <p>💡 系統初次啟動，請使用預設管理員登入：<br/>帳號 <strong>admin</strong> / 密碼 <strong>admin123</strong></p>}
           </div>
         </div>
@@ -2422,45 +2435,44 @@ export default function MounjaroApp() {
   }
 
   return (
-    <div className="tech-shell wellness-shell relative min-h-screen overflow-hidden py-5 px-3 sm:py-7 sm:px-5 font-sans">
-      <style>{TECH_THEME_STYLES}</style>
-      <div className="decorative-blob pointer-events-none fixed -left-24 top-20 h-80 w-80 rounded-full bg-violet-600/10 blur-3xl" style={{ animation: 'floatSoft 8s ease-in-out infinite' }}></div>
-      <div className="decorative-blob pointer-events-none fixed -right-28 top-1/3 h-96 w-96 rounded-full bg-cyan-400/10 blur-3xl" style={{ animation: 'floatSoft 10s ease-in-out infinite reverse' }}></div>
+    <div className="comic-shell wellness-shell relative min-h-screen overflow-hidden py-4 px-3 sm:py-7 sm:px-5 font-sans">
+      <style>{COMIC_THEME_STYLES}</style>
+      <div className="decorative-blob pointer-events-none fixed -left-24 top-20 h-80 w-80 rounded-full bg-[#f6d15f]/25 blur-3xl" style={{ animation: 'floatSoft 8s ease-in-out infinite' }}></div>
+      <div className="decorative-blob pointer-events-none fixed -right-28 top-1/3 h-96 w-96 rounded-full bg-[#7db9e8]/20 blur-3xl" style={{ animation: 'floatSoft 10s ease-in-out infinite reverse' }}></div>
 
       <div className="relative z-10 max-w-5xl mx-auto space-y-5 sm:space-y-6">
-        <header className="relative overflow-hidden rounded-[2rem] border border-cyan-400/20 bg-gradient-to-br from-[#0b1220] via-[#10152a] to-[#091d25] p-5 sm:p-7 text-white shadow-2xl shadow-black/40">
-          <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-cyan-300/80 to-transparent"></div>
-          <div className="absolute -right-10 -top-16 h-44 w-44 rounded-full border-[28px] border-cyan-300/5"></div>
-          <div className="absolute bottom-0 right-1/4 h-24 w-24 translate-y-1/2 rounded-full bg-cyan-300/10 blur-xl"></div>
+        <header className="comic-card relative overflow-hidden rounded-[2rem] bg-[#fffdf7] p-5 sm:p-7">
+          <div className="absolute -right-10 -top-16 h-44 w-44 rounded-full border-[28px] border-[#7db9e8]/30"></div>
+          <div className="absolute bottom-0 right-1/4 h-24 w-24 translate-y-1/2 rounded-full bg-[#f6d15f]/35 blur-xl"></div>
           <div className="relative flex flex-col sm:flex-row items-start sm:items-center justify-between gap-5">
             <div className="flex items-center gap-4">
-              <div className="tech-live inline-flex h-14 w-14 items-center justify-center rounded-2xl bg-cyan-400/10 backdrop-blur ring-1 ring-cyan-300/30 shadow-lg shadow-cyan-950/40"><SyringeIcon className="text-cyan-300" /></div>
+              <div className="comic-live inline-flex h-16 w-16 shrink-0 items-center justify-center rounded-full border-2 border-[#343434] bg-[#fff4bd]"><ComicBeagleIcon className="h-14 w-14" /></div>
               <div>
-                <p className="text-xs font-bold uppercase tracking-[0.22em] text-cyan-300">Mounjaro Health OS</p>
-                <h1 className="mt-1 text-2xl sm:text-3xl font-black tracking-tight">猛健樂健康日誌</h1>
-                <p className="mt-1 text-sm text-slate-400">使用者 <strong className="text-cyan-200">{appUser.username}</strong>・{new Date().toLocaleDateString('zh-TW', { month: 'long', day: 'numeric', weekday: 'long' })}</p>
+                <p className="text-xs font-black tracking-[0.12em] text-sky-700">MY WELLNESS DIARY</p>
+                <h1 className="mt-1 text-2xl sm:text-3xl font-black tracking-tight text-slate-900">猛健樂健康日誌</h1>
+                <p className="mt-1 text-sm text-slate-600">嗨，<strong className="text-[#c83f39]">{appUser.username}</strong>・{new Date().toLocaleDateString('zh-TW', { month: 'long', day: 'numeric', weekday: 'long' })}</p>
               </div>
             </div>
             <div className="flex w-full sm:w-auto items-center gap-2">
-              <span className="flex-1 sm:flex-none rounded-full bg-emerald-400/10 px-3 py-2 text-center text-xs font-bold text-emerald-300 ring-1 ring-emerald-300/20"><span className="mr-1 text-emerald-400">●</span> CLOUD ONLINE</span>
-              <button onClick={handleLogout} className="rounded-full bg-slate-800/80 px-4 py-2 text-sm font-bold text-slate-200 ring-1 ring-slate-600/60 backdrop-blur hover:bg-slate-700 transition-colors">登出</button>
+              <span className="flex-1 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-2 text-center text-xs font-bold text-emerald-700 sm:flex-none"><span className="mr-1 text-emerald-500">●</span> 已同步雲端</span>
+              <button onClick={handleLogout} className="rounded-full border-2 border-[#343434] bg-white px-4 py-2 text-sm font-black text-slate-700 shadow-[2px_2px_0_rgba(52,52,52,.1)] transition-colors hover:bg-[#fff4bd]">登出</button>
             </div>
           </div>
         </header>
 
-        <nav className="sticky top-3 z-30 flex overflow-x-auto hide-scrollbar gap-1.5 rounded-2xl border border-slate-700/70 bg-[#0a101d]/90 p-1.5 shadow-xl shadow-black/30 backdrop-blur-xl">
-          <button onClick={() => setActiveTab('calculator')} className={`flex-1 min-w-[94px] whitespace-nowrap rounded-xl px-3 py-3 text-sm font-bold transition-all ${activeTab === 'calculator' ? 'bg-gradient-to-r from-cyan-500 to-blue-600 text-white shadow-lg shadow-cyan-950/50 ring-1 ring-cyan-300/30' : 'text-slate-400 hover:bg-slate-800 hover:text-cyan-300'}`}>
-            <span className="mr-2 font-mono text-[10px] opacity-70">01</span>劑量計算
+        <nav aria-label="主要功能" className="sticky top-3 z-30 flex overflow-x-auto hide-scrollbar gap-1.5 rounded-2xl border-2 border-[#343434] bg-[#fffdf7]/95 p-1.5 shadow-[4px_5px_0_rgba(52,52,52,.12)] backdrop-blur-xl">
+          <button onClick={() => setActiveTab('calculator')} aria-current={activeTab === 'calculator' ? 'page' : undefined} className={`flex-1 min-w-[102px] whitespace-nowrap rounded-xl px-3 py-3 text-sm font-black transition-all ${activeTab === 'calculator' ? 'bg-[#7db9e8] text-[#252525] shadow-[2px_2px_0_rgba(52,52,52,.13)]' : 'text-slate-600 hover:bg-sky-50 hover:text-sky-800'}`}>
+            <span aria-hidden="true" className="mr-1.5">✦</span>劑量計算
           </button>
-          <button onClick={() => setActiveTab('schedule')} className={`flex-1 min-w-[86px] whitespace-nowrap rounded-xl px-3 py-3 text-sm font-bold transition-all ${activeTab === 'schedule' ? 'bg-gradient-to-r from-sky-500 to-cyan-500 text-white shadow-lg shadow-cyan-950/50 ring-1 ring-cyan-300/30' : 'text-slate-400 hover:bg-slate-800 hover:text-cyan-300'}`}>
-            <span className="mr-2 font-mono text-[10px] opacity-70">02</span>計畫表
+          <button onClick={() => setActiveTab('schedule')} aria-current={activeTab === 'schedule' ? 'page' : undefined} className={`flex-1 min-w-[92px] whitespace-nowrap rounded-xl px-3 py-3 text-sm font-black transition-all ${activeTab === 'schedule' ? 'bg-[#f6d15f] text-[#252525] shadow-[2px_2px_0_rgba(52,52,52,.13)]' : 'text-slate-600 hover:bg-amber-50 hover:text-amber-800'}`}>
+            <span aria-hidden="true" className="mr-1.5">▦</span>計畫表
           </button>
-          <button onClick={() => setActiveTab('log')} className={`flex-1 min-w-[94px] whitespace-nowrap rounded-xl px-3 py-3 text-sm font-bold transition-all ${activeTab === 'log' ? 'bg-gradient-to-r from-emerald-500 to-teal-500 text-white shadow-lg shadow-emerald-950/40 ring-1 ring-emerald-300/30' : 'text-slate-400 hover:bg-slate-800 hover:text-emerald-300'}`}>
-            <span className="mr-2 font-mono text-[10px] opacity-70">03</span>健康紀錄
+          <button onClick={() => setActiveTab('log')} aria-current={activeTab === 'log' ? 'page' : undefined} className={`flex-1 min-w-[102px] whitespace-nowrap rounded-xl px-3 py-3 text-sm font-black transition-all ${activeTab === 'log' ? 'bg-[#86bf8c] text-[#252525] shadow-[2px_2px_0_rgba(52,52,52,.13)]' : 'text-slate-600 hover:bg-emerald-50 hover:text-emerald-800'}`}>
+            <span aria-hidden="true" className="mr-1.5">♡</span>健康紀錄
           </button>
           {appUser.role === 'admin' && (
-            <button onClick={() => setActiveTab('admin')} className={`flex-1 min-w-[94px] whitespace-nowrap rounded-xl px-3 py-3 text-sm font-bold transition-all ${activeTab === 'admin' ? 'bg-gradient-to-r from-amber-500 to-orange-600 text-white shadow-lg shadow-amber-950/40 ring-1 ring-amber-300/30' : 'text-amber-400 hover:bg-slate-800'}`}>
-              <span className="mr-2 font-mono text-[10px] opacity-70">04</span>系統管理
+            <button onClick={() => setActiveTab('admin')} aria-current={activeTab === 'admin' ? 'page' : undefined} className={`flex-1 min-w-[102px] whitespace-nowrap rounded-xl px-3 py-3 text-sm font-black transition-all ${activeTab === 'admin' ? 'bg-[#e98f88] text-[#252525] shadow-[2px_2px_0_rgba(52,52,52,.13)]' : 'text-slate-600 hover:bg-red-50 hover:text-red-700'}`}>
+              <span aria-hidden="true" className="mr-1.5">⚙</span>系統管理
             </button>
           )}
         </nav>
