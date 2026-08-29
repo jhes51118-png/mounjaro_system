@@ -92,6 +92,12 @@ const ComicBeagleIcon = ({ className = '' }) => (
   </svg>
 );
 
+const SnoopyImage = ({ className = '' }) => {
+  const [failed, setFailed] = useState(false);
+  if (failed) return <ComicBeagleIcon className={className} />;
+  return <img src="/snoopy.png" alt="史努比" title="Snoopy © Peanuts Worldwide LLC" className={`object-contain ${className}`} onError={() => setFailed(true)} />;
+};
+
 const PEN_OPTIONS = [2.5, 5, 7.5, 10, 12.5, 15]; 
 const COMMON_DOSES = [2.5, 3.0, 3.5, 4.0, 4.5, 5.0, 6.0, 7.0, 8.0, 9.0, 10]; 
 const STANDARD_TITRATION = [2.5, 5, 7.5, 10, 12.5, 15];
@@ -464,11 +470,14 @@ function TrendChart({ logs }) {
   const rangeW = maxWeight - minWeight === 0 ? 10 : maxWeight - minWeight;
   const rangeD = maxDose - minDose === 0 ? 5 : maxDose - minDose;
 
-  // SVG 畫布設定
-  const svgW = 600; const svgH = 220;
-  const padX = 40; const padY = 30;
+  // 資料多時增加實際畫布寬度，維持固定高度，避免整張 SVG 被放大造成文字重疊
+  const pointGap = chartData.length > 12 ? 58 : 48;
+  const svgW = Math.max(600, (chartData.length - 1) * pointGap + 96);
+  const svgH = 250;
+  const padX = 48; const padY = 38;
   const innerW = svgW - padX * 2;
   const innerH = svgH - padY * 2;
+  const labelStep = Math.max(1, Math.ceil(chartData.length / 16));
 
   // 比例換算函式
   const getX = (idx) => padX + (idx / (chartData.length - 1)) * innerW;
@@ -483,19 +492,19 @@ function TrendChart({ logs }) {
     .join(' ');
 
   return (
-    <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm overflow-hidden mb-6">
-      <div className="flex justify-between items-center mb-4 px-2">
+    <div className="bg-white p-3 sm:p-4 rounded-xl border border-slate-200 shadow-sm overflow-hidden mb-6">
+      <div className="flex flex-col gap-2 sm:flex-row sm:justify-between sm:items-center mb-3 px-1 sm:px-2">
         <h3 className="font-bold text-slate-700 text-sm">體重與劑量趨勢</h3>
-        <div className="flex gap-4 text-xs font-medium">
+        <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs font-medium">
           <div className="flex items-center"><span className="w-3 h-3 rounded-full bg-blue-500 mr-1.5"></span>體重 (kg)</div>
           <div className="flex items-center"><span className="w-3 h-3 rounded-full bg-emerald-400 mr-1.5"></span>劑量 (mg)</div>
         </div>
       </div>
+      {chartData.length > 10 && <p className="mb-2 px-1 text-[11px] font-medium text-slate-500 sm:px-2">← 左右滑動可查看全部 {chartData.length} 筆紀錄 →</p>}
       
       {/* 讓圖表在手機上可以滑動 */}
-      <div className="overflow-x-auto hide-scrollbar">
-        <div style={{ minWidth: `${Math.max(chartData.length * 50, 400)}px` }}>
-          <svg viewBox={`0 0 ${svgW} ${svgH}`} className="w-full h-auto drop-shadow-sm">
+      <div className="overflow-x-auto overscroll-x-contain pb-2">
+          <svg viewBox={`0 0 ${svgW} ${svgH}`} width={svgW} height={svgH} role="img" aria-label={`體重與劑量趨勢圖，共 ${chartData.length} 筆紀錄`} className="block max-w-none drop-shadow-sm">
             {/* 畫背景輔助線 */}
             <line x1={padX} y1={padY} x2={svgW-padX} y2={padY} stroke="#f1f5f9" strokeWidth="1" />
             <line x1={padX} y1={svgH/2} x2={svgW-padX} y2={svgH/2} stroke="#f1f5f9" strokeWidth="1" />
@@ -509,6 +518,7 @@ function TrendChart({ logs }) {
             {/* 畫資料點與標籤 */}
             {chartData.map((d, i) => {
               const x = getX(i); const yw = getYW(d.weight); const yd = isInjectionLog(d) ? getYD(Number(d.dose)) : null;
+              const showLabel = i === 0 || i === chartData.length - 1 || i % labelStep === 0;
               // 日期格式化 MM/DD
               const dateStr = d.date.substring(5).replace('-', '/');
               return (
@@ -517,21 +527,20 @@ function TrendChart({ logs }) {
                   {yd !== null && (
                     <>
                       <circle cx={x} cy={yd} r="4" fill="#10b981" stroke="white" strokeWidth="2"><title>{`日期: ${d.date}\n劑量: ${d.dose} mg`}</title></circle>
-                      <text x={x} y={yd - 10} fontSize="10" fill="#059669" textAnchor="middle" fontWeight="bold">{d.dose}</text>
+                      {showLabel && <text x={x} y={yd - 10} fontSize="10" fill="#059669" textAnchor="middle" fontWeight="bold">{d.dose}</text>}
                     </>
                   )}
                   
                   {/* 藍點 (體重) */}
                   <circle cx={x} cy={yw} r="5" fill="#2563eb" stroke="white" strokeWidth="2"><title>{`日期: ${d.date}\n體重: ${d.weight} kg`}</title></circle>
-                  <text x={x} y={yw - 12} fontSize="11" fill="#1d4ed8" textAnchor="middle" fontWeight="bold">{d.weight}</text>
+                  {showLabel && <text x={x} y={yw - 12} fontSize="11" fill="#1d4ed8" textAnchor="middle" fontWeight="bold">{d.weight}</text>}
                   
                   {/* X軸日期 */}
-                  <text x={x} y={svgH - 10} fontSize="10" fill="#64748b" textAnchor="middle">{dateStr}</text>
+                  {showLabel && <text x={x} y={svgH - 11} fontSize="10" fill="#64748b" textAnchor="middle">{dateStr}</text>}
                 </g>
               );
             })}
           </svg>
-        </div>
       </div>
     </div>
   );
@@ -2384,7 +2393,7 @@ export default function MounjaroApp() {
       <div className="comic-shell relative min-h-screen overflow-hidden flex items-center justify-center p-4 font-sans">
         <style>{COMIC_THEME_STYLES}</style>
         <div className="relative comic-card bg-[#fffdf7] rounded-[2rem] px-10 py-9 text-center">
-          <ComicBeagleIcon className="comic-live mx-auto mb-4 h-20 w-20" />
+          <SnoopyImage className="comic-live mx-auto mb-4 h-24 w-24" />
           <p className="font-black text-slate-900">正在整理今天的健康日誌</p>
           <p className="mt-2 text-xs font-bold tracking-[0.12em] text-sky-700">資料同步中，馬上就好…</p>
         </div>
@@ -2401,7 +2410,7 @@ export default function MounjaroApp() {
         <div className="comic-card relative max-w-md w-full bg-[#fffdf7] rounded-[2rem] p-7 sm:p-9 animation-fade-in">
           <div className="text-center mb-8">
             <div className="comic-live relative mx-auto mb-5 flex h-24 w-24 items-center justify-center rounded-full border-2 border-[#343434] bg-[#fff4bd]">
-              <ComicBeagleIcon className="h-20 w-20" />
+              <SnoopyImage className="h-20 w-20" />
             </div>
             <span className="comic-sticker mb-3 inline-flex -rotate-2 rounded-full bg-[#7db9e8] px-3 py-1 text-xs font-black tracking-[0.12em] text-[#252525]">MY WELLNESS DIARY</span>
             <h1 className="text-3xl font-black text-slate-900 tracking-tight">猛健樂健康日誌</h1>
@@ -2446,7 +2455,7 @@ export default function MounjaroApp() {
           <div className="absolute bottom-0 right-1/4 h-24 w-24 translate-y-1/2 rounded-full bg-[#f6d15f]/35 blur-xl"></div>
           <div className="relative flex flex-col sm:flex-row items-start sm:items-center justify-between gap-5">
             <div className="flex items-center gap-4">
-              <div className="comic-live inline-flex h-16 w-16 shrink-0 items-center justify-center rounded-full border-2 border-[#343434] bg-[#fff4bd]"><ComicBeagleIcon className="h-14 w-14" /></div>
+              <div className="comic-live inline-flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-full border-2 border-[#343434] bg-white"><SnoopyImage className="h-14 w-14" /></div>
               <div>
                 <p className="text-xs font-black tracking-[0.12em] text-sky-700">MY WELLNESS DIARY</p>
                 <h1 className="mt-1 text-2xl sm:text-3xl font-black tracking-tight text-slate-900">猛健樂健康日誌</h1>
