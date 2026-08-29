@@ -326,17 +326,11 @@ const buildHealthSnapshot = (logs, profile) => {
     .map(log => ({ date: log.date, doseMg: Number(log.dose), symptoms: normalizeSymptoms(log.symptoms) }))
     .sort((a, b) => new Date(a.date) - new Date(b.date));
 
-  if (weightLogs.length === 0) {
-    return {
-      status: 'insufficient', statusLabel: '等待體重資料', tone: 'slate',
-      headline: '新增體重紀錄後即可開始分析',
-      firstWeightKg: null, latestWeightKg: null, totalChangeKg: null,
-      weeklyLossKg: null, weeklyLossPercent: null, bmi: null, trendDays: 0,
-      weightEntryCount: 0, recentSymptoms: [], injectionLogs,
-      observations: ['至少需要 2 筆不同日期的體重紀錄，才能判讀變化速度。'],
-      suggestions: ['以相近的時間與測量條件記錄體重，會讓趨勢更可靠。']
-    };
-  }
+  if (weightLogs.length === 0) return {
+    firstWeightKg: null, latestWeightKg: null, totalChangeKg: null,
+    weeklyLossKg: null, weeklyLossPercent: null, bmi: null, trendDays: 0,
+    weightEntryCount: 0, injectionLogs
+  };
 
   const firstLog = weightLogs[0];
   const latestLog = weightLogs[weightLogs.length - 1];
@@ -354,62 +348,7 @@ const buildHealthSnapshot = (logs, profile) => {
   const heightCm = Number(profile?.heightCm);
   const age = Number(profile?.age);
   const bmi = age >= 20 && heightCm >= 120 ? latestLog.weight / Math.pow(heightCm / 100, 2) : null;
-  const recentSymptomStart = new Date(latestDate);
-  recentSymptomStart.setDate(recentSymptomStart.getDate() - 30);
-  const recentSymptoms = [...new Set(injectionLogs
-    .filter(log => new Date(`${log.date}T12:00:00`) >= recentSymptomStart)
-    .flatMap(log => log.symptoms))];
-
-  let status = 'insufficient';
-  let statusLabel = '資料期間不足';
-  let tone = 'slate';
-  let headline = '再累積一些紀錄，趨勢會更可靠';
-  const observations = [];
-  const suggestions = [];
-
-  if (weeklyLossKg !== null) {
-    if (weeklyLossKg < -0.15) {
-      status = 'gaining'; statusLabel = '近期體重回升'; tone = 'amber';
-      headline = '體重短期回升不代表失敗，先看整體趨勢';
-      suggestions.push('確認最近幾次是否在相近時間與條件測量，再觀察 2–4 週的趨勢。');
-      suggestions.push('回顧睡眠、壓力、活動與飲食規律；若持續回升，可帶紀錄與醫療人員討論。');
-    } else if (weeklyLossKg < 0.15) {
-      status = 'stable'; statusLabel = '近期大致持平'; tone = 'sky';
-      headline = '平台期很常見，穩定記錄比單次數字更重要';
-      suggestions.push('保持規律飲食、睡眠與活動，先以 3–4 週趨勢評估，不必因短期持平否定努力。');
-      suggestions.push('若已持平數週且有疑問，請把體重與施打紀錄交給醫療人員評估，而不是自行調整劑量。');
-    } else if (weeklyLossKg < 0.45) {
-      status = 'slow'; statusLabel = '溫和下降'; tone = 'cyan';
-      headline = '速度較溫和，也可能是更容易維持的步調';
-      suggestions.push('繼續維持可長久執行的飲食、活動與睡眠習慣，不需要追求每週都快速下降。');
-      suggestions.push('用腰圍、體力與飲食規律一起觀察，不要只用單一體重判斷成效。');
-    } else if (weeklyLossKg <= 0.9 && weeklyLossPercent <= 1) {
-      status = 'steady'; statusLabel = '漸進下降'; tone = 'emerald';
-      headline = '目前呈現穩定、漸進的下降趨勢';
-      suggestions.push('做得很好，請維持足夠水分、規律進食與蛋白質來源。');
-      suggestions.push('每週安排肌力或阻力活動，有助於維持肌肉與日常功能。');
-    } else {
-      status = 'fast'; statusLabel = '下降速度偏快'; tone = 'red';
-      headline = '近期下降偏快，請優先確認營養、水分與身體狀況';
-      suggestions.push('確保能正常進食與補充水分，並留意疲倦、頭暈、持續腸胃不適等訊號。');
-      suggestions.push('請儘快把近期體重、劑量與症狀紀錄提供給醫療人員評估，不要自行更改劑量。');
-    }
-    observations.push(`近 ${trendDays} 天平均每週${weeklyLossKg >= 0 ? '下降' : '增加'}約 ${Math.abs(weeklyLossKg).toFixed(2)} kg。`);
-  } else {
-    suggestions.push('請累積至少相隔 7 天的體重紀錄，再判讀每週變化速度。');
-  }
-
-  observations.push(`從第一筆到最新一筆共${totalChangeKg <= 0 ? '下降' : '增加'} ${Math.abs(totalChangeKg).toFixed(1)} kg。`);
-  if (bmi !== null) {
-    const bmiLabel = bmi < 18.5 ? '偏低' : bmi < 25 ? '健康範圍' : bmi < 30 ? '過重範圍' : '肥胖範圍';
-    observations.push(`目前成人 BMI 篩檢值約 ${bmi.toFixed(1)}（${bmiLabel}），僅供趨勢參考。`);
-  }
-  const latestInjection = injectionLogs[injectionLogs.length - 1];
-  if (latestInjection) observations.push(`最近一次紀錄劑量為 ${latestInjection.doseMg} mg；體重趨勢不能單獨用來決定劑量。`);
-  if (recentSymptoms.length > 0) observations.push(`近 30 天曾記錄：${recentSymptoms.join('、')}。`);
-
   return {
-    status, statusLabel, tone, headline,
     firstWeightKg: firstLog.weight,
     latestWeightKg: latestLog.weight,
     totalChangeKg: roundHealthValue(totalChangeKg),
@@ -417,7 +356,7 @@ const buildHealthSnapshot = (logs, profile) => {
     weeklyLossPercent: roundHealthValue(weeklyLossPercent, 2),
     bmi: roundHealthValue(bmi), trendDays,
     weightEntryCount: weightLogs.length,
-    recentSymptoms, injectionLogs, observations: observations.slice(0, 4), suggestions
+    injectionLogs
   };
 };
 
@@ -1441,12 +1380,9 @@ function HealthInsightPanel({ appUser, logs }) {
   const [profile, setProfile] = useState(null);
   const [heightCm, setHeightCm] = useState('');
   const [age, setAge] = useState('');
+  const [targetWeightKg, setTargetWeightKg] = useState('');
   const [profileMessage, setProfileMessage] = useState('');
   const [isSavingProfile, setIsSavingProfile] = useState(false);
-  const [aiAdvice, setAiAdvice] = useState(null);
-  const [aiMessage, setAiMessage] = useState('');
-  const [isAskingAi, setIsAskingAi] = useState(false);
-  const logFingerprint = logs.map(log => `${log.id}:${log.date}:${log.weight}:${log.dose}:${(log.symptoms || []).join(',')}`).join('|');
 
   useEffect(() => {
     if (!db || !appUser?.username) return undefined;
@@ -1459,12 +1395,8 @@ function HealthInsightPanel({ appUser, logs }) {
   useEffect(() => {
     setHeightCm(profile?.heightCm ? String(profile.heightCm) : '');
     setAge(profile?.age ? String(profile.age) : '');
-  }, [profile?.heightCm, profile?.age]);
-
-  useEffect(() => {
-    setAiAdvice(null);
-    setAiMessage('');
-  }, [logFingerprint, profile?.updatedAt]);
+    setTargetWeightKg(profile?.targetWeightKg ? String(profile.targetWeightKg) : '');
+  }, [profile?.heightCm, profile?.age, profile?.targetWeightKg]);
 
   const effectiveProfile = {
     heightCm: Number(heightCm) || Number(profile?.heightCm) || null,
@@ -1472,21 +1404,33 @@ function HealthInsightPanel({ appUser, logs }) {
   };
   const snapshot = buildHealthSnapshot(logs, effectiveProfile);
   const latestInjection = snapshot.injectionLogs[snapshot.injectionLogs.length - 1];
-  const toneStyles = {
-    slate: 'border-slate-300 bg-white text-slate-700',
-    amber: 'border-amber-300 bg-amber-50 text-amber-900',
-    sky: 'border-sky-300 bg-sky-50 text-sky-800',
-    cyan: 'border-cyan-300 bg-cyan-50 text-cyan-800',
-    emerald: 'border-emerald-300 bg-emerald-50 text-emerald-800',
-    red: 'border-red-300 bg-red-50 text-red-800'
-  };
+  const savedTargetWeight = Number(profile?.targetWeightKg);
+  const hasSavedTarget = Number.isFinite(savedTargetWeight) && savedTargetWeight >= 20 && savedTargetWeight <= 300;
+  const hasGoal = hasSavedTarget
+    && snapshot.firstWeightKg !== null
+    && savedTargetWeight < snapshot.firstWeightKg;
+  const goalRange = hasGoal ? snapshot.firstWeightKg - savedTargetWeight : 0;
+  const goalProgress = hasGoal && goalRange > 0
+    ? Math.min(100, Math.max(0, ((snapshot.firstWeightKg - snapshot.latestWeightKg) / goalRange) * 100))
+    : 0;
+  const remainingToGoal = hasGoal ? Math.max(0, snapshot.latestWeightKg - savedTargetWeight) : null;
+  const goalReached = hasGoal && snapshot.latestWeightKg <= savedTargetWeight;
 
   const handleSaveProfile = async (event) => {
     event.preventDefault();
     const parsedHeight = Number(heightCm);
     const parsedAge = Number(age);
+    const parsedTargetWeight = targetWeightKg === '' ? null : Number(targetWeightKg);
     if (!Number.isFinite(parsedHeight) || parsedHeight < 120 || parsedHeight > 230 || !Number.isInteger(parsedAge) || parsedAge < 18 || parsedAge > 100) {
       setProfileMessage('請輸入 120–230 公分的身高，以及 18–100 歲的整數年齡。');
+      return;
+    }
+    if (parsedTargetWeight !== null && (!Number.isFinite(parsedTargetWeight) || parsedTargetWeight < 20 || parsedTargetWeight > 300)) {
+      setProfileMessage('目標體重請輸入 20–300 kg。');
+      return;
+    }
+    if (parsedTargetWeight !== null && snapshot.firstWeightKg !== null && parsedTargetWeight >= snapshot.firstWeightKg) {
+      setProfileMessage(`目標體重需低於第一筆紀錄 ${snapshot.firstWeightKg} kg。`);
       return;
     }
     setIsSavingProfile(true);
@@ -1496,6 +1440,7 @@ function HealthInsightPanel({ appUser, logs }) {
         username: appUser.username,
         heightCm: parsedHeight,
         age: parsedAge,
+        targetWeightKg: parsedTargetWeight,
         updatedAt: new Date().toISOString()
       }, { merge: true });
       setProfileMessage('個人健康資料已安全同步到雲端。');
@@ -1506,83 +1451,45 @@ function HealthInsightPanel({ appUser, logs }) {
     setIsSavingProfile(false);
   };
 
-  const handleAskAi = async () => {
-    if (snapshot.weightEntryCount < 2 || isAskingAi) return;
-    setIsAskingAi(true);
-    setAiAdvice(null);
-    setAiMessage('');
-    try {
-      const response = await fetch('/api/health-advice', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          profile: effectiveProfile,
-          metrics: {
-            status: snapshot.status,
-            firstWeightKg: snapshot.firstWeightKg,
-            latestWeightKg: snapshot.latestWeightKg,
-            totalChangeKg: snapshot.totalChangeKg,
-            weeklyLossKg: snapshot.weeklyLossKg,
-            weeklyLossPercent: snapshot.weeklyLossPercent,
-            bmi: snapshot.bmi,
-            trendDays: snapshot.trendDays
-          },
-          recentDoses: snapshot.injectionLogs.slice(-12).map(item => ({ date: item.date, doseMg: item.doseMg })),
-          recentSymptoms: snapshot.recentSymptoms
-        })
-      });
-      const result = await response.json().catch(() => ({}));
-      if (!response.ok) {
-        setAiMessage(result.error === 'AI_NOT_CONFIGURED'
-          ? 'Gemini 尚未連接；目前顯示的是本機循證智慧分析，所有核心判讀仍可正常使用。'
-          : 'Gemini 暫時無法連線；已保留本機循證分析結果。');
-      } else {
-        setAiAdvice(result.advice);
-        setAiMessage('Gemini 已依照去識別化的趨勢資料產生個人化鼓勵。');
-      }
-    } catch (error) {
-      console.error('AI 健康分析失敗:', error);
-      setAiMessage('Gemini 暫時無法連線；已保留本機循證分析結果。');
-    }
-    setIsAskingAi(false);
-  };
-
   return (
     <section className="comic-card overflow-hidden rounded-3xl bg-[#fffdf7]">
       <div className="border-b-2 border-[#343434] bg-gradient-to-r from-[#e9f5fb] via-[#fffdf7] to-[#fff2bf] p-5 sm:p-6">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <div className="flex items-center gap-2">
-              <span className="comic-sticker rounded-full bg-[#7db9e8] px-3 py-1 text-[10px] font-black tracking-[0.12em] text-[#252525]">健康小幫手</span>
-              <span className={`rounded-full border px-3 py-1 text-xs font-bold ${toneStyles[snapshot.tone]}`}>{snapshot.statusLabel}</span>
+              <span className="comic-sticker rounded-full bg-[#7db9e8] px-3 py-1 text-[10px] font-black tracking-[0.12em] text-[#252525]">健康概況</span>
             </div>
-            <h2 className="mt-3 text-xl font-black text-slate-900">智慧體重趨勢與鼓勵</h2>
-            <p className="mt-1 text-sm text-slate-600">把每次紀錄串成清楚趨勢，陪你穩穩前進。</p>
+            <h2 className="mt-3 text-xl font-black text-slate-900">體重與個人目標</h2>
+            <p className="mt-1 text-sm text-slate-600">集中查看目前數值與目標完成進度。</p>
           </div>
           <div className="rounded-2xl border-2 border-[#343434] bg-[#fff4bd] px-4 py-3 text-xs leading-relaxed text-[#5f4c19] shadow-[3px_3px_0_rgba(52,52,52,.1)] sm:max-w-xs">
-            AI 不會指示增減藥。任何劑量調整都必須由開藥醫療人員評估。
+            請勿只依體重趨勢自行調整劑量；任何調整都應由開藥醫療人員評估。
           </div>
         </div>
       </div>
 
       <div className="space-y-5 p-5 sm:p-6">
         <form onSubmit={handleSaveProfile} className="rounded-2xl border border-slate-200 bg-[#fbf8f0] p-4">
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-end">
-            <div className="flex-1">
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-[1fr_1fr_1fr_auto] lg:items-end">
+            <div>
               <label className="mb-1 block text-xs font-bold text-slate-600">身高（cm）</label>
               <input type="number" min="120" max="230" step="0.1" value={heightCm} onChange={event => { setHeightCm(event.target.value); setProfileMessage(''); }} placeholder="例如 168" className="w-full rounded-xl border px-3 py-2.5" />
             </div>
-            <div className="flex-1">
+            <div>
               <label className="mb-1 block text-xs font-bold text-slate-600">年齡</label>
               <input type="number" min="18" max="100" step="1" value={age} onChange={event => { setAge(event.target.value); setProfileMessage(''); }} placeholder="例如 35" className="w-full rounded-xl border px-3 py-2.5" />
             </div>
-            <button type="submit" disabled={isSavingProfile} className="rounded-xl border-2 border-[#343434] bg-[#7db9e8] px-5 py-2.5 text-sm font-black text-[#252525] shadow-[3px_3px_0_rgba(52,52,52,.12)] hover:bg-[#92c7ed] disabled:bg-slate-200">
+            <div>
+              <label className="mb-1 block text-xs font-bold text-slate-600">目標體重（kg）</label>
+              <input type="number" min="20" max="300" step="0.1" value={targetWeightKg} onChange={event => { setTargetWeightKg(event.target.value); setProfileMessage(''); }} placeholder="例如 75" className="w-full rounded-xl border px-3 py-2.5" />
+            </div>
+            <button type="submit" disabled={isSavingProfile} className="min-h-[44px] rounded-xl border-2 border-[#343434] bg-[#7db9e8] px-5 py-2.5 text-sm font-black text-[#252525] shadow-[3px_3px_0_rgba(52,52,52,.12)] hover:bg-[#92c7ed] disabled:bg-slate-200 sm:col-span-2 lg:col-span-1">
               {isSavingProfile ? '同步中...' : profile ? '更新資料' : '建立資料'}
             </button>
           </div>
           <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-xs">
-            <p className="text-slate-500">限成人資料；BMI 僅是篩檢值，不能單獨判斷健康狀況。</p>
-            {profileMessage && <p className={profileMessage.includes('失敗') || profileMessage.includes('請輸入') ? 'text-red-600' : 'text-emerald-700'}>{profileMessage}</p>}
+            <p className="text-slate-500">目標進度以第一筆體重為起點；BMI 僅供數值參考。</p>
+            {profileMessage && <p className={profileMessage.includes('失敗') || profileMessage.includes('請輸入') || profileMessage.includes('需低於') ? 'text-red-600' : 'text-emerald-700'}>{profileMessage}</p>}
           </div>
         </form>
 
@@ -1605,46 +1512,56 @@ function HealthInsightPanel({ appUser, logs }) {
           </div>
         </div>
 
-        <div className={`rounded-2xl border p-4 ${toneStyles[snapshot.tone]}`}>
-          <p className="text-lg font-black">{snapshot.headline}</p>
-          <div className="mt-3 grid gap-4 md:grid-cols-2">
+        <div className="rounded-2xl border-2 border-[#343434] bg-gradient-to-r from-[#e9f5fb] to-[#eff8f0] p-4 shadow-[3px_3px_0_rgba(52,52,52,.1)] sm:p-5">
+          <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
-              <p className="mb-2 text-xs font-black uppercase tracking-wider opacity-60">系統觀察</p>
-              <ul className="space-y-2 text-sm leading-relaxed">
-                {snapshot.observations.map(item => <li key={item} className="flex gap-2"><span>›</span><span>{item}</span></li>)}
-              </ul>
+              <p className="text-sm font-black text-slate-800">目標體重進度</p>
+              <p className="mt-1 text-xs text-slate-500">從第一筆體重開始計算</p>
             </div>
-            <div>
-              <p className="mb-2 text-xs font-black uppercase tracking-wider opacity-60">現在可以做的事</p>
-              <ul className="space-y-2 text-sm leading-relaxed">
-                {snapshot.suggestions.map(item => <li key={item} className="flex gap-2"><span>✓</span><span>{item}</span></li>)}
-              </ul>
+            {hasGoal && (
+              <span className={`rounded-full px-3 py-1 text-xs font-black ${goalReached ? 'bg-emerald-100 text-emerald-800' : 'bg-white text-sky-800'}`}>
+                {goalReached ? '🎉 已達成目標' : `已完成 ${Math.round(goalProgress)}%`}
+              </span>
+            )}
+          </div>
+
+          {!hasGoal ? (
+            <div className="mt-4 rounded-xl border border-dashed border-sky-300 bg-white/70 px-4 py-5 text-center text-sm text-slate-600">
+              {snapshot.firstWeightKg === null
+                ? '新增第一筆體重後，即可開始計算目標進度。'
+                : hasSavedTarget
+                  ? `目標體重需低於起始的 ${snapshot.firstWeightKg} kg，請在上方更新。`
+                  : '請在上方設定目標體重，開始追蹤完成進度。'}
             </div>
-          </div>
+          ) : (
+            <>
+              <div className="mt-4 h-4 overflow-hidden rounded-full border border-slate-300 bg-white">
+                <div className="h-full rounded-full bg-gradient-to-r from-[#7db9e8] via-[#86bf8c] to-[#f6d15f] transition-all duration-500" style={{ width: `${goalProgress}%` }}></div>
+              </div>
+              <div className="mt-4 grid grid-cols-3 gap-2 text-center">
+                <div className="rounded-xl bg-white p-3">
+                  <p className="text-[10px] font-bold text-slate-500">起始</p>
+                  <p className="mt-1 text-sm font-black text-slate-800">{snapshot.firstWeightKg} kg</p>
+                </div>
+                <div className="rounded-xl bg-white p-3">
+                  <p className="text-[10px] font-bold text-slate-500">目前</p>
+                  <p className="mt-1 text-sm font-black text-sky-700">{snapshot.latestWeightKg} kg</p>
+                </div>
+                <div className="rounded-xl bg-white p-3">
+                  <p className="text-[10px] font-bold text-slate-500">目標</p>
+                  <p className="mt-1 text-sm font-black text-emerald-700">{savedTargetWeight} kg</p>
+                </div>
+              </div>
+              <p className="mt-3 text-center text-sm font-bold text-slate-700">
+                {goalReached
+                  ? snapshot.latestWeightKg < savedTargetWeight
+                    ? `目前已比目標少 ${Math.abs(snapshot.latestWeightKg - savedTargetWeight).toFixed(1)} kg`
+                    : '目前已達目標體重'
+                  : `距離目標還差 ${remainingToGoal.toFixed(1)} kg`}
+              </p>
+            </>
+          )}
         </div>
-
-        {aiAdvice && (
-          <div className="rounded-2xl border-2 border-[#343434] bg-[#f1edff] p-4 text-slate-800 shadow-[3px_3px_0_rgba(52,52,52,.1)]">
-            <p className="font-black">{aiAdvice.encouragement}</p>
-            {aiAdvice.observations?.length > 0 && <ul className="mt-3 space-y-1 text-sm text-slate-700">{aiAdvice.observations.map(item => <li key={item}>• {item}</li>)}</ul>}
-            {aiAdvice.suggestions?.length > 0 && <ul className="mt-3 space-y-1 text-sm text-sky-800">{aiAdvice.suggestions.map(item => <li key={item}>→ {item}</li>)}</ul>}
-          </div>
-        )}
-
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="text-xs leading-relaxed text-slate-500">
-            依據：<a href="https://www.cdc.gov/healthy-weight-growth/losing-weight/index.html" target="_blank" rel="noreferrer" className="font-bold text-sky-700 hover:underline">CDC 漸進減重</a>、<a href="https://www.cdc.gov/bmi/adult-calculator/bmi-categories.html" target="_blank" rel="noreferrer" className="font-bold text-sky-700 hover:underline">成人 BMI</a>、<a href="https://pi.lilly.com/us/mounjaro-uspi.pdf?s=" target="_blank" rel="noreferrer" className="font-bold text-sky-700 hover:underline">Mounjaro 處方資訊</a>
-            <p className="mt-1">按下 Gemini 按鈕後，僅會傳送去識別化的身高、年齡、趨勢數值、劑量日期與症狀摘要；不傳送帳號、密碼、姓名或自由文字筆記。</p>
-          </div>
-          <button type="button" onClick={handleAskAi} disabled={snapshot.weightEntryCount < 2 || isAskingAi} className="shrink-0 rounded-xl border-2 border-[#343434] bg-[#d94a43] px-5 py-3 text-sm font-black text-white shadow-[4px_4px_0_rgba(52,52,52,.14)] hover:bg-[#c83f39] disabled:bg-slate-200 disabled:text-slate-500">
-            {isAskingAi ? 'AI 分析中...' : '請 Gemini 個人化鼓勵'}
-          </button>
-        </div>
-        {aiMessage && <p className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs text-slate-600">{aiMessage}</p>}
-
-        <p className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-xs leading-relaxed text-red-700">
-          若出現持續或嚴重腹痛、反覆嘔吐／腹瀉、無法進食補水、明顯脫水或其他令人擔心的症狀，請儘快聯絡醫療人員；緊急狀況請立即就醫。
-        </p>
       </div>
     </section>
   );
@@ -2469,19 +2386,19 @@ export default function MounjaroApp() {
           </div>
         </header>
 
-        <nav aria-label="主要功能" className="sticky top-3 z-30 flex overflow-x-auto hide-scrollbar gap-1.5 rounded-2xl border-2 border-[#343434] bg-[#fffdf7]/95 p-1.5 shadow-[4px_5px_0_rgba(52,52,52,.12)] backdrop-blur-xl">
-          <button onClick={() => setActiveTab('calculator')} aria-current={activeTab === 'calculator' ? 'page' : undefined} className={`flex-1 min-w-[102px] whitespace-nowrap rounded-xl px-3 py-3 text-sm font-black transition-all ${activeTab === 'calculator' ? 'bg-[#7db9e8] text-[#252525] shadow-[2px_2px_0_rgba(52,52,52,.13)]' : 'text-slate-600 hover:bg-sky-50 hover:text-sky-800'}`}>
-            <span aria-hidden="true" className="mr-1.5">✦</span>劑量計算
+        <nav aria-label="主要功能" className={`sticky top-3 z-30 grid ${appUser.role === 'admin' ? 'grid-cols-4' : 'grid-cols-3'} gap-1 rounded-2xl border-2 border-[#343434] bg-[#fffdf7]/95 p-1.5 shadow-[4px_5px_0_rgba(52,52,52,.12)] backdrop-blur-xl sm:gap-1.5`}>
+          <button onClick={() => setActiveTab('calculator')} aria-current={activeTab === 'calculator' ? 'page' : undefined} className={`min-h-[58px] min-w-0 whitespace-nowrap rounded-xl px-1 py-2 text-[11px] font-black leading-tight transition-all sm:min-h-[48px] sm:px-3 sm:py-3 sm:text-sm ${activeTab === 'calculator' ? 'bg-[#7db9e8] text-[#252525] shadow-[2px_2px_0_rgba(52,52,52,.13)]' : 'text-slate-600 hover:bg-sky-50 hover:text-sky-800'}`}>
+            <span aria-hidden="true" className="mb-1 block text-sm sm:mb-0 sm:mr-1.5 sm:inline">✦</span>劑量計算
           </button>
-          <button onClick={() => setActiveTab('schedule')} aria-current={activeTab === 'schedule' ? 'page' : undefined} className={`flex-1 min-w-[92px] whitespace-nowrap rounded-xl px-3 py-3 text-sm font-black transition-all ${activeTab === 'schedule' ? 'bg-[#f6d15f] text-[#252525] shadow-[2px_2px_0_rgba(52,52,52,.13)]' : 'text-slate-600 hover:bg-amber-50 hover:text-amber-800'}`}>
-            <span aria-hidden="true" className="mr-1.5">▦</span>計畫表
+          <button onClick={() => setActiveTab('schedule')} aria-current={activeTab === 'schedule' ? 'page' : undefined} className={`min-h-[58px] min-w-0 whitespace-nowrap rounded-xl px-1 py-2 text-[11px] font-black leading-tight transition-all sm:min-h-[48px] sm:px-3 sm:py-3 sm:text-sm ${activeTab === 'schedule' ? 'bg-[#f6d15f] text-[#252525] shadow-[2px_2px_0_rgba(52,52,52,.13)]' : 'text-slate-600 hover:bg-amber-50 hover:text-amber-800'}`}>
+            <span aria-hidden="true" className="mb-1 block text-sm sm:mb-0 sm:mr-1.5 sm:inline">▦</span>計畫表
           </button>
-          <button onClick={() => setActiveTab('log')} aria-current={activeTab === 'log' ? 'page' : undefined} className={`flex-1 min-w-[102px] whitespace-nowrap rounded-xl px-3 py-3 text-sm font-black transition-all ${activeTab === 'log' ? 'bg-[#86bf8c] text-[#252525] shadow-[2px_2px_0_rgba(52,52,52,.13)]' : 'text-slate-600 hover:bg-emerald-50 hover:text-emerald-800'}`}>
-            <span aria-hidden="true" className="mr-1.5">♡</span>健康紀錄
+          <button onClick={() => setActiveTab('log')} aria-current={activeTab === 'log' ? 'page' : undefined} className={`min-h-[58px] min-w-0 whitespace-nowrap rounded-xl px-1 py-2 text-[11px] font-black leading-tight transition-all sm:min-h-[48px] sm:px-3 sm:py-3 sm:text-sm ${activeTab === 'log' ? 'bg-[#86bf8c] text-[#252525] shadow-[2px_2px_0_rgba(52,52,52,.13)]' : 'text-slate-600 hover:bg-emerald-50 hover:text-emerald-800'}`}>
+            <span aria-hidden="true" className="mb-1 block text-sm sm:mb-0 sm:mr-1.5 sm:inline">♡</span>健康紀錄
           </button>
           {appUser.role === 'admin' && (
-            <button onClick={() => setActiveTab('admin')} aria-current={activeTab === 'admin' ? 'page' : undefined} className={`flex-1 min-w-[102px] whitespace-nowrap rounded-xl px-3 py-3 text-sm font-black transition-all ${activeTab === 'admin' ? 'bg-[#e98f88] text-[#252525] shadow-[2px_2px_0_rgba(52,52,52,.13)]' : 'text-slate-600 hover:bg-red-50 hover:text-red-700'}`}>
-              <span aria-hidden="true" className="mr-1.5">⚙</span>系統管理
+            <button onClick={() => setActiveTab('admin')} aria-current={activeTab === 'admin' ? 'page' : undefined} className={`min-h-[58px] min-w-0 whitespace-nowrap rounded-xl px-1 py-2 text-[11px] font-black leading-tight transition-all sm:min-h-[48px] sm:px-3 sm:py-3 sm:text-sm ${activeTab === 'admin' ? 'bg-[#e98f88] text-[#252525] shadow-[2px_2px_0_rgba(52,52,52,.13)]' : 'text-slate-600 hover:bg-red-50 hover:text-red-700'}`}>
+              <span aria-hidden="true" className="mb-1 block text-sm sm:mb-0 sm:mr-1.5 sm:inline">⚙</span>系統管理
             </button>
           )}
         </nav>
