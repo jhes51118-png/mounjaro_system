@@ -302,6 +302,17 @@ const toLocalDateKey = (dateValue) => {
   return `${year}-${month}-${day}`;
 };
 
+const getFutureMonthDateKey = (months, fromDate = new Date()) => {
+  const result = new Date(fromDate);
+  result.setHours(12, 0, 0, 0);
+  const originalDay = result.getDate();
+  result.setDate(1);
+  result.setMonth(result.getMonth() + months);
+  const lastDay = new Date(result.getFullYear(), result.getMonth() + 1, 0).getDate();
+  result.setDate(Math.min(originalDay, lastDay));
+  return toLocalDateKey(result);
+};
+
 const calculateDoseExhaustion = (remainingMg, plannedEntries) => {
   if (remainingMg <= 0) return { exhausted: true, exhaustionEntry: null, remainingAfterPlan: 0 };
   let projectedRemaining = remainingMg;
@@ -1383,6 +1394,7 @@ function HealthInsightPanel({ appUser, logs }) {
   const [age, setAge] = useState('');
   const [targetWeightKg, setTargetWeightKg] = useState('');
   const [targetDate, setTargetDate] = useState('');
+  const [targetDateChoice, setTargetDateChoice] = useState('custom');
   const [showDemographicsEditor, setShowDemographicsEditor] = useState(false);
   const [profileMessage, setProfileMessage] = useState('');
   const [isSavingProfile, setIsSavingProfile] = useState(false);
@@ -1403,6 +1415,7 @@ function HealthInsightPanel({ appUser, logs }) {
     setAge(profile?.age ? String(profile.age) : '');
     setTargetWeightKg(profile?.targetWeightKg ? String(profile.targetWeightKg) : '');
     setTargetDate(profile?.targetDate || '');
+    setTargetDateChoice('custom');
   }, [profile?.heightCm, profile?.age, profile?.targetWeightKg, profile?.targetDate]);
 
   useEffect(() => {
@@ -1428,6 +1441,8 @@ function HealthInsightPanel({ appUser, logs }) {
   const goalReached = hasGoal && snapshot.latestWeightKg <= savedTargetWeight;
   const savedTargetDate = profile?.targetDate || '';
   const todayKey = toLocalDateKey(new Date());
+  const oneMonthDateKey = getFutureMonthDateKey(1);
+  const twoMonthDateKey = getFutureMonthDateKey(2);
   const goalDaysRemaining = savedTargetDate
     ? Math.round((new Date(`${savedTargetDate}T12:00:00`) - new Date(`${todayKey}T12:00:00`)) / 86400000)
     : null;
@@ -1605,14 +1620,25 @@ function HealthInsightPanel({ appUser, logs }) {
             )}
           </div>
 
-          <form onSubmit={handleSaveGoal} className="mt-4 grid gap-3 rounded-xl border border-slate-200 bg-white/70 p-3 sm:grid-cols-[1fr_1.25fr_auto] sm:items-end">
+          <form onSubmit={handleSaveGoal} className="mt-4 grid gap-3 rounded-xl border border-slate-200 bg-white/70 p-3 sm:grid-cols-[.85fr_1.6fr_auto] sm:items-end">
             <div>
               <label className="mb-1 block text-xs font-bold text-slate-600">目標體重（kg）</label>
               <input type="number" min="20" max="300" step="0.1" value={targetWeightKg} onChange={event => { setTargetWeightKg(event.target.value); setGoalMessage(''); }} placeholder="例如 75" className="w-full rounded-xl border px-3 py-2.5" />
             </div>
             <div>
-              <label className="mb-1 block text-xs font-bold text-slate-600">預計達成日期（選填）</label>
-              <input type="date" min={todayKey} value={targetDate} onChange={event => { setTargetDate(event.target.value); setGoalMessage(''); }} className="w-full rounded-xl border px-3 py-2.5" />
+              <label className="mb-1 block text-xs font-bold text-slate-600">預計達成時間（選填）</label>
+              <div className="grid grid-cols-3 gap-1.5">
+                <button type="button" aria-pressed={targetDateChoice === 'oneMonth'} onClick={() => { setTargetDateChoice('oneMonth'); setTargetDate(oneMonthDateKey); setGoalMessage(''); }} className={`min-h-[44px] rounded-lg border px-2 py-1.5 text-[11px] font-black leading-tight ${targetDateChoice === 'oneMonth' ? 'border-sky-500 bg-sky-100 text-sky-800 ring-1 ring-sky-400' : 'border-slate-200 bg-white text-slate-600'}`}>
+                  1 個月後<span className="mt-0.5 block text-[9px] font-medium opacity-75">{formatLogDate(oneMonthDateKey)}</span>
+                </button>
+                <button type="button" aria-pressed={targetDateChoice === 'twoMonths'} onClick={() => { setTargetDateChoice('twoMonths'); setTargetDate(twoMonthDateKey); setGoalMessage(''); }} className={`min-h-[44px] rounded-lg border px-2 py-1.5 text-[11px] font-black leading-tight ${targetDateChoice === 'twoMonths' ? 'border-emerald-500 bg-emerald-100 text-emerald-800 ring-1 ring-emerald-400' : 'border-slate-200 bg-white text-slate-600'}`}>
+                  2 個月後<span className="mt-0.5 block text-[9px] font-medium opacity-75">{formatLogDate(twoMonthDateKey)}</span>
+                </button>
+                <button type="button" aria-pressed={targetDateChoice === 'custom'} onClick={() => { setTargetDateChoice('custom'); setGoalMessage(''); }} className={`min-h-[44px] rounded-lg border px-2 py-1.5 text-[11px] font-black ${targetDateChoice === 'custom' ? 'border-amber-500 bg-amber-100 text-amber-800 ring-1 ring-amber-400' : 'border-slate-200 bg-white text-slate-600'}`}>
+                  指定日期
+                </button>
+              </div>
+              {targetDateChoice === 'custom' && <input type="date" min={todayKey} value={targetDate} onChange={event => { setTargetDate(event.target.value); setGoalMessage(''); }} className="mt-2 w-full rounded-xl border px-3 py-2.5" />}
             </div>
             <button type="submit" disabled={isSavingGoal} className="min-h-[44px] rounded-xl border-2 border-[#343434] bg-[#86bf8c] px-5 py-2.5 text-sm font-black text-[#252525] shadow-[3px_3px_0_rgba(52,52,52,.12)] hover:bg-[#9bcca0] disabled:bg-slate-200">
               {isSavingGoal ? '同步中...' : hasSavedTarget ? '更新目標' : '設定目標'}
@@ -1996,7 +2022,7 @@ function LogView({ appUser, allLogs }) {
   );
 }
 
-function AdminView({ appUser, usersList, allLogs, allSchedules, sharingPlans }) {
+function AdminView({ appUser, usersList, allLogs, allSchedules, allProfiles, sharingPlans }) {
   const [newUsername, setNewUsername] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
@@ -2073,10 +2099,25 @@ function AdminView({ appUser, usersList, allLogs, allSchedules, sharingPlans }) 
     setIsDeletingUser(false);
   };
 
+  const managedUsers = usersList.filter(user => user.role !== 'admin');
+  const managedUsernames = new Set(managedUsers.map(user => user.username));
+  const managedLogs = allLogs.filter(log => managedUsernames.has(log.username));
+
   // 如果點擊了某個使用者，顯示專屬詳細檔案與圖表
   if (selectedUser) {
     const targetUserLogs = allLogs.filter(log => log.username === selectedUser.username);
     const targetUserSchedule = allSchedules.find(item => item.id === selectedUser.username || item.username === selectedUser.username);
+    const targetUserProfile = allProfiles.find(item => item.id === selectedUser.username || item.username === selectedUser.username);
+    const targetHealthSnapshot = buildHealthSnapshot(targetUserLogs, targetUserProfile);
+    const targetGoalWeight = Number(targetUserProfile?.targetWeightKg);
+    const targetHasGoal = Number.isFinite(targetGoalWeight)
+      && targetGoalWeight >= 20
+      && targetGoalWeight <= 300
+      && targetHealthSnapshot.firstWeightKg !== null
+      && targetGoalWeight < targetHealthSnapshot.firstWeightKg;
+    const targetGoalProgress = targetHasGoal
+      ? Math.min(100, Math.max(0, ((targetHealthSnapshot.firstWeightKg - targetHealthSnapshot.latestWeightKg) / (targetHealthSnapshot.firstWeightKg - targetGoalWeight)) * 100))
+      : null;
     return (
       <div className="space-y-6 animation-fade-in">
         <div className="flex items-center gap-3 mb-2">
@@ -2088,7 +2129,7 @@ function AdminView({ appUser, usersList, allLogs, allSchedules, sharingPlans }) 
           </h2>
         </div>
 
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
           <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
             <p className="text-xs text-slate-400 mb-1">健康紀錄總數</p>
             <p className="text-2xl font-bold text-slate-800">{targetUserLogs.length} <span className="text-xs font-normal text-slate-400">筆</span></p>
@@ -2096,6 +2137,21 @@ function AdminView({ appUser, usersList, allLogs, allSchedules, sharingPlans }) 
           <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
             <p className="text-xs text-slate-400 mb-1">雲端計畫</p>
             <p className={`text-sm font-bold mt-2 ${targetUserSchedule ? 'text-emerald-600' : 'text-slate-400'}`}>{targetUserSchedule ? '已建立並同步' : '尚未建立'}</p>
+          </div>
+          <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
+            <p className="text-xs text-slate-400 mb-1">身高／年齡</p>
+            <p className="mt-2 text-sm font-bold text-slate-700">
+              {targetUserProfile?.heightCm ? `${targetUserProfile.heightCm} cm` : '未設定'}
+              <span className="mx-1 text-slate-300">・</span>
+              {targetUserProfile?.age ? `${targetUserProfile.age} 歲` : '未設定'}
+            </p>
+          </div>
+          <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
+            <p className="text-xs text-slate-400 mb-1">目標體重進度</p>
+            <p className={`mt-2 text-sm font-bold ${targetHasGoal ? 'text-sky-700' : 'text-slate-400'}`}>
+              {targetHasGoal ? `${targetHealthSnapshot.latestWeightKg} → ${targetGoalWeight} kg（${Math.round(targetGoalProgress)}%）` : '尚未設定完整目標'}
+            </p>
+            {targetUserProfile?.targetDate && <p className="mt-1 text-[11px] text-slate-500">預計 {new Date(`${targetUserProfile.targetDate}T12:00:00`).toLocaleDateString('zh-TW', { year: 'numeric', month: 'numeric', day: 'numeric', weekday: 'short' })}</p>}
           </div>
         </div>
 
@@ -2222,7 +2278,7 @@ function AdminView({ appUser, usersList, allLogs, allSchedules, sharingPlans }) 
         <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 sm:p-6">
           <h3 className="font-semibold text-slate-800 mb-4">現有使用者列表 <span className="text-xs font-normal text-slate-400 ml-2">(點擊查看詳情)</span></h3>
           <ul className="space-y-2">
-            {usersList.map(u => (
+            {managedUsers.map(u => (
               <li 
                 key={u.id} 
                 onClick={() => setSelectedUser(u)}
@@ -2246,12 +2302,13 @@ function AdminView({ appUser, usersList, allLogs, allSchedules, sharingPlans }) 
                 </div>
               </li>
             ))}
+            {managedUsers.length === 0 && <li className="rounded-lg border border-dashed border-slate-200 bg-slate-50 p-4 text-center text-sm text-slate-400">尚未建立一般使用者</li>}
           </ul>
         </div>
         <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 sm:p-6">
           <h3 className="font-semibold text-slate-800 mb-4">全體數據總覽 (最新50筆)</h3>
           <div className="space-y-3 max-h-96 overflow-y-auto pr-2 hide-scrollbar">
-            {allLogs.slice(0, 50).map(log => (
+            {managedLogs.slice(0, 50).map(log => (
               <div key={log.id} className="bg-slate-50 p-3 rounded-lg border border-slate-100 text-sm flex justify-between items-center">
                 <div>
                   <div className="font-bold text-indigo-600 mb-1">{log.username}</div>
@@ -2267,7 +2324,7 @@ function AdminView({ appUser, usersList, allLogs, allSchedules, sharingPlans }) 
                 <span className="text-slate-400 text-xs">{formatLogDate(log.date)}</span>
               </div>
             ))}
-            {allLogs.length === 0 && <p className="text-sm text-slate-400">目前尚無任何紀錄</p>}
+            {managedLogs.length === 0 && <p className="text-sm text-slate-400">目前尚無任何使用者紀錄</p>}
           </div>
         </div>
       </div>
@@ -2281,6 +2338,7 @@ export default function MounjaroApp() {
   const [usersList, setUsersList] = useState([]);
   const [allLogs, setAllLogs] = useState([]);
   const [allSchedules, setAllSchedules] = useState([]);
+  const [allProfiles, setAllProfiles] = useState([]);
   const [sharingPlans, setSharingPlans] = useState([]);
   const [doseInventories, setDoseInventories] = useState([]);
   const [usersLoaded, setUsersLoaded] = useState(false);
@@ -2353,6 +2411,18 @@ export default function MounjaroApp() {
   }, [firebaseUser]);
 
   useEffect(() => {
+    if (!firebaseUser || appUser?.role !== 'admin') {
+      setAllProfiles([]);
+      return undefined;
+    }
+    const profilesRef = collection(db, 'mounjaroProfiles');
+    return onSnapshot(profilesRef, (snapshot) => {
+      const profiles = snapshot.docs.map(profileDoc => ({ id: profileDoc.id, ...profileDoc.data() }));
+      setAllProfiles(profiles);
+    }, err => console.error('Fetch profiles error:', err));
+  }, [firebaseUser, appUser?.role]);
+
+  useEffect(() => {
     if (!firebaseUser || !usersLoaded || sessionChecked) return;
 
     const rememberedUsername = localStorage.getItem(SESSION_KEY);
@@ -2360,6 +2430,7 @@ export default function MounjaroApp() {
       const rememberedUser = usersList.find(user => user.username === rememberedUsername);
       if (rememberedUser) {
         setAppUser({ username: rememberedUser.username, role: rememberedUser.role });
+        setActiveTab(rememberedUser.role === 'admin' ? 'admin' : 'calculator');
       } else {
         localStorage.removeItem(SESSION_KEY);
       }
@@ -2370,6 +2441,7 @@ export default function MounjaroApp() {
   const rememberUser = (user) => {
     localStorage.setItem(SESSION_KEY, user.username);
     setAppUser({ username: user.username, role: user.role });
+    setActiveTab(user.role === 'admin' ? 'admin' : 'calculator');
   };
 
   const handleLogin = async (e) => {
@@ -2485,16 +2557,18 @@ export default function MounjaroApp() {
           </div>
         </header>
 
-        <nav aria-label="主要功能" className={`sticky top-3 z-30 grid ${appUser.role === 'admin' ? 'grid-cols-4' : 'grid-cols-3'} gap-1 rounded-2xl border-2 border-[#343434] bg-[#fffdf7]/95 p-1.5 shadow-[4px_5px_0_rgba(52,52,52,.12)] backdrop-blur-xl sm:gap-1.5`}>
+        <nav aria-label="主要功能" className="sticky top-3 z-30 grid grid-cols-3 gap-1 rounded-2xl border-2 border-[#343434] bg-[#fffdf7]/95 p-1.5 shadow-[4px_5px_0_rgba(52,52,52,.12)] backdrop-blur-xl sm:gap-1.5">
           <button onClick={() => setActiveTab('calculator')} aria-current={activeTab === 'calculator' ? 'page' : undefined} className={`min-h-[58px] min-w-0 whitespace-nowrap rounded-xl px-1 py-2 text-[11px] font-black leading-tight transition-all sm:min-h-[48px] sm:px-3 sm:py-3 sm:text-sm ${activeTab === 'calculator' ? 'bg-[#7db9e8] text-[#252525] shadow-[2px_2px_0_rgba(52,52,52,.13)]' : 'text-slate-600 hover:bg-sky-50 hover:text-sky-800'}`}>
             <span aria-hidden="true" className="mb-1 block text-sm sm:mb-0 sm:mr-1.5 sm:inline">✦</span>劑量計算
           </button>
           <button onClick={() => setActiveTab('schedule')} aria-current={activeTab === 'schedule' ? 'page' : undefined} className={`min-h-[58px] min-w-0 whitespace-nowrap rounded-xl px-1 py-2 text-[11px] font-black leading-tight transition-all sm:min-h-[48px] sm:px-3 sm:py-3 sm:text-sm ${activeTab === 'schedule' ? 'bg-[#f6d15f] text-[#252525] shadow-[2px_2px_0_rgba(52,52,52,.13)]' : 'text-slate-600 hover:bg-amber-50 hover:text-amber-800'}`}>
             <span aria-hidden="true" className="mb-1 block text-sm sm:mb-0 sm:mr-1.5 sm:inline">▦</span>計畫表
           </button>
-          <button onClick={() => setActiveTab('log')} aria-current={activeTab === 'log' ? 'page' : undefined} className={`min-h-[58px] min-w-0 whitespace-nowrap rounded-xl px-1 py-2 text-[11px] font-black leading-tight transition-all sm:min-h-[48px] sm:px-3 sm:py-3 sm:text-sm ${activeTab === 'log' ? 'bg-[#86bf8c] text-[#252525] shadow-[2px_2px_0_rgba(52,52,52,.13)]' : 'text-slate-600 hover:bg-emerald-50 hover:text-emerald-800'}`}>
-            <span aria-hidden="true" className="mb-1 block text-sm sm:mb-0 sm:mr-1.5 sm:inline">♡</span>健康紀錄
-          </button>
+          {appUser.role !== 'admin' && (
+            <button onClick={() => setActiveTab('log')} aria-current={activeTab === 'log' ? 'page' : undefined} className={`min-h-[58px] min-w-0 whitespace-nowrap rounded-xl px-1 py-2 text-[11px] font-black leading-tight transition-all sm:min-h-[48px] sm:px-3 sm:py-3 sm:text-sm ${activeTab === 'log' ? 'bg-[#86bf8c] text-[#252525] shadow-[2px_2px_0_rgba(52,52,52,.13)]' : 'text-slate-600 hover:bg-emerald-50 hover:text-emerald-800'}`}>
+              <span aria-hidden="true" className="mb-1 block text-sm sm:mb-0 sm:mr-1.5 sm:inline">♡</span>健康紀錄
+            </button>
+          )}
           {appUser.role === 'admin' && (
             <button onClick={() => setActiveTab('admin')} aria-current={activeTab === 'admin' ? 'page' : undefined} className={`min-h-[58px] min-w-0 whitespace-nowrap rounded-xl px-1 py-2 text-[11px] font-black leading-tight transition-all sm:min-h-[48px] sm:px-3 sm:py-3 sm:text-sm ${activeTab === 'admin' ? 'bg-[#e98f88] text-[#252525] shadow-[2px_2px_0_rgba(52,52,52,.13)]' : 'text-slate-600 hover:bg-red-50 hover:text-red-700'}`}>
               <span aria-hidden="true" className="mb-1 block text-sm sm:mb-0 sm:mr-1.5 sm:inline">⚙</span>系統管理
@@ -2514,8 +2588,8 @@ export default function MounjaroApp() {
               allSchedules={allSchedules}
             />
           )}
-          {activeTab === 'log' && <LogView appUser={appUser} allLogs={allLogs} />}
-          {activeTab === 'admin' && appUser.role === 'admin' && <AdminView appUser={appUser} usersList={usersList} allLogs={allLogs} allSchedules={allSchedules} sharingPlans={sharingPlans} />}
+          {activeTab === 'log' && appUser.role !== 'admin' && <LogView appUser={appUser} allLogs={allLogs} />}
+          {activeTab === 'admin' && appUser.role === 'admin' && <AdminView appUser={appUser} usersList={usersList} allLogs={allLogs} allSchedules={allSchedules} allProfiles={allProfiles} sharingPlans={sharingPlans} />}
         </main>
       </div>
     </div>
