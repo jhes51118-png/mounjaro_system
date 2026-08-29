@@ -163,6 +163,30 @@ const COMIC_THEME_STYLES = `
   .comic-shell button:active:not(:disabled) { transform: translateY(1px); }
   .comic-shell button:disabled { filter: saturate(.45); opacity: .58; }
 
+  /* Forecast cards sit on dark gradients, so their translucent surfaces must
+     not be converted into the light comic-card treatment below. */
+  .comic-shell .forecast-glass {
+    background: rgba(255,255,255,.14) !important;
+    border-color: rgba(255,255,255,.28) !important;
+    box-shadow: none !important;
+    color: #fff !important;
+  }
+  .comic-shell .forecast-badge {
+    background: rgba(255,255,255,.18) !important;
+    border-color: rgba(255,255,255,.3) !important;
+    box-shadow: none !important;
+    color: #fff !important;
+  }
+  .comic-shell .goal-date-input {
+    display: block;
+    box-sizing: border-box;
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    -webkit-appearance: none;
+    appearance: none;
+  }
+
   .comic-shell .bg-white,
   .comic-shell [class*="bg-white/"] {
     background-color: rgba(255,253,247,.94) !important;
@@ -1241,17 +1265,17 @@ function ScheduleView({ appUser, userSchedule, allLogs, inventory, sharingPlans,
                 <p className="text-xs font-bold uppercase tracking-wider text-indigo-100">單人用量預測</p>
                 <h3 className="mt-1 text-lg font-black">目前這支筆何時用完？</h3>
               </div>
-              {inventory && <span className="rounded-full bg-white/15 px-3 py-1 text-xs font-bold ring-1 ring-white/20">{inventory.penStrength} mg 規格</span>}
+              {inventory && <span className="forecast-badge shrink-0 rounded-full px-3 py-1 text-xs font-bold ring-1 ring-white/20">{inventory.penStrength} mg 規格</span>}
             </div>
             {!inventory ? (
-              <div className="mt-5 rounded-xl bg-white/10 p-4 text-sm text-indigo-50 ring-1 ring-white/15">
+              <div className="forecast-glass mt-5 rounded-xl p-4 text-sm text-white ring-1 ring-white/15">
                 請先到「劑量計算」儲存目前這支筆的起始日期，系統即可依計畫表推算用完時間。
               </div>
             ) : (
               <div className="mt-5">
                 <p className="text-sm text-indigo-100">目前預估剩餘</p>
                 <p className="mt-1 text-4xl font-black">{ownRemainingMg.toFixed(1)} <span className="text-sm font-bold">mg</span></p>
-                <div className="mt-4 rounded-xl bg-white/10 p-4 ring-1 ring-white/20">
+                <div className="forecast-glass mt-4 rounded-xl p-4 ring-1 ring-white/20">
                   {ownProjection.exhausted ? (
                     <><p className="font-black text-amber-200">已達標稱總量</p><p className="mt-1 text-sm text-indigo-100">請建立新一支筆的起始日期。</p></>
                   ) : ownProjection.exhaustionEntry ? (
@@ -1274,12 +1298,12 @@ function ScheduleView({ appUser, userSchedule, allLogs, inventory, sharingPlans,
                   <p className="text-xs font-bold uppercase tracking-wider text-emerald-50">雙方綁定預測</p>
                   <h3 className="mt-1 text-lg font-black">兩人合併用量何時用完？</h3>
                 </div>
-                <span className="rounded-full bg-white/15 px-3 py-1 text-xs font-bold ring-1 ring-white/20">{activeSharedPlan.penStrength} mg 規格</span>
+                <span className="forecast-badge shrink-0 rounded-full px-3 py-1 text-xs font-bold ring-1 ring-white/20">{activeSharedPlan.penStrength} mg 規格</span>
               </div>
               <div className="mt-5">
                 <p className="text-sm text-emerald-50">合併預估剩餘</p>
                 <p className="mt-1 text-4xl font-black">{sharedRemainingMg.toFixed(1)} <span className="text-sm font-bold">mg</span></p>
-                <div className="mt-4 rounded-xl bg-white/10 p-4 ring-1 ring-white/20">
+                <div className="forecast-glass mt-4 rounded-xl p-4 ring-1 ring-white/20">
                   {sharedProjection.exhausted ? (
                     <><p className="font-black text-amber-100">已達標稱總量</p><p className="mt-1 text-sm text-emerald-50">請解除綁定並建立新一組規劃。</p></>
                   ) : sharedProjection.exhaustionEntry ? (
@@ -1620,12 +1644,12 @@ function HealthInsightPanel({ appUser, logs }) {
             )}
           </div>
 
-          <form onSubmit={handleSaveGoal} className="mt-4 grid gap-3 rounded-xl border border-slate-200 bg-white/70 p-3 sm:grid-cols-[.85fr_1.6fr_auto] sm:items-end">
-            <div>
+          <form onSubmit={handleSaveGoal} className="mt-4 grid min-w-0 gap-3 rounded-xl border border-slate-200 bg-white/70 p-3 sm:grid-cols-[.85fr_1.6fr_auto] sm:items-end">
+            <div className="min-w-0">
               <label className="mb-1 block text-xs font-bold text-slate-600">目標體重（kg）</label>
               <input type="number" min="20" max="300" step="0.1" value={targetWeightKg} onChange={event => { setTargetWeightKg(event.target.value); setGoalMessage(''); }} placeholder="例如 75" className="w-full rounded-xl border px-3 py-2.5" />
             </div>
-            <div>
+            <div className="min-w-0 overflow-hidden">
               <label className="mb-1 block text-xs font-bold text-slate-600">預計達成時間（選填）</label>
               <div className="grid grid-cols-3 gap-1.5">
                 <button type="button" aria-pressed={targetDateChoice === 'oneMonth'} onClick={() => { setTargetDateChoice('oneMonth'); setTargetDate(oneMonthDateKey); setGoalMessage(''); }} className={`min-h-[44px] rounded-lg border px-2 py-1.5 text-[11px] font-black leading-tight ${targetDateChoice === 'oneMonth' ? 'border-sky-500 bg-sky-100 text-sky-800 ring-1 ring-sky-400' : 'border-slate-200 bg-white text-slate-600'}`}>
@@ -1638,7 +1662,7 @@ function HealthInsightPanel({ appUser, logs }) {
                   指定日期
                 </button>
               </div>
-              {targetDateChoice === 'custom' && <input type="date" min={todayKey} value={targetDate} onChange={event => { setTargetDate(event.target.value); setGoalMessage(''); }} className="mt-2 w-full rounded-xl border px-3 py-2.5" />}
+              {targetDateChoice === 'custom' && <input type="date" min={todayKey} value={targetDate} onChange={event => { setTargetDate(event.target.value); setGoalMessage(''); }} className="goal-date-input mt-2 rounded-xl border px-3 py-2.5" />}
             </div>
             <button type="submit" disabled={isSavingGoal} className="min-h-[44px] rounded-xl border-2 border-[#343434] bg-[#86bf8c] px-5 py-2.5 text-sm font-black text-[#252525] shadow-[3px_3px_0_rgba(52,52,52,.12)] hover:bg-[#9bcca0] disabled:bg-slate-200">
               {isSavingGoal ? '同步中...' : hasSavedTarget ? '更新目標' : '設定目標'}
