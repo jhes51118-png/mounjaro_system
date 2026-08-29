@@ -1378,17 +1378,23 @@ function ScheduleView({ appUser, userSchedule, allLogs, inventory, sharingPlans,
 
 function HealthInsightPanel({ appUser, logs }) {
   const [profile, setProfile] = useState(null);
+  const [profileLoaded, setProfileLoaded] = useState(false);
   const [heightCm, setHeightCm] = useState('');
   const [age, setAge] = useState('');
   const [targetWeightKg, setTargetWeightKg] = useState('');
+  const [targetDate, setTargetDate] = useState('');
+  const [showDemographicsEditor, setShowDemographicsEditor] = useState(false);
   const [profileMessage, setProfileMessage] = useState('');
   const [isSavingProfile, setIsSavingProfile] = useState(false);
+  const [goalMessage, setGoalMessage] = useState('');
+  const [isSavingGoal, setIsSavingGoal] = useState(false);
 
   useEffect(() => {
     if (!db || !appUser?.username) return undefined;
     const profileRef = doc(db, 'mounjaroProfiles', appUser.username);
     return onSnapshot(profileRef, (snapshot) => {
       setProfile(snapshot.exists() ? { id: snapshot.id, ...snapshot.data() } : null);
+      setProfileLoaded(true);
     }, error => console.error('Fetch own profile error:', error));
   }, [appUser?.username]);
 
@@ -1396,11 +1402,16 @@ function HealthInsightPanel({ appUser, logs }) {
     setHeightCm(profile?.heightCm ? String(profile.heightCm) : '');
     setAge(profile?.age ? String(profile.age) : '');
     setTargetWeightKg(profile?.targetWeightKg ? String(profile.targetWeightKg) : '');
-  }, [profile?.heightCm, profile?.age, profile?.targetWeightKg]);
+    setTargetDate(profile?.targetDate || '');
+  }, [profile?.heightCm, profile?.age, profile?.targetWeightKg, profile?.targetDate]);
+
+  useEffect(() => {
+    if (profileLoaded && (!profile?.heightCm || !profile?.age)) setShowDemographicsEditor(true);
+  }, [profileLoaded, profile?.heightCm, profile?.age]);
 
   const effectiveProfile = {
-    heightCm: Number(heightCm) || Number(profile?.heightCm) || null,
-    age: Number(age) || Number(profile?.age) || null
+    heightCm: Number(profile?.heightCm) || null,
+    age: Number(profile?.age) || null
   };
   const snapshot = buildHealthSnapshot(logs, effectiveProfile);
   const latestInjection = snapshot.injectionLogs[snapshot.injectionLogs.length - 1];
@@ -1415,22 +1426,28 @@ function HealthInsightPanel({ appUser, logs }) {
     : 0;
   const remainingToGoal = hasGoal ? Math.max(0, snapshot.latestWeightKg - savedTargetWeight) : null;
   const goalReached = hasGoal && snapshot.latestWeightKg <= savedTargetWeight;
+  const savedTargetDate = profile?.targetDate || '';
+  const todayKey = toLocalDateKey(new Date());
+  const goalDaysRemaining = savedTargetDate
+    ? Math.round((new Date(`${savedTargetDate}T12:00:00`) - new Date(`${todayKey}T12:00:00`)) / 86400000)
+    : null;
+  const targetDateLabel = savedTargetDate
+    ? new Date(`${savedTargetDate}T12:00:00`).toLocaleDateString('zh-TW', { year: 'numeric', month: 'numeric', day: 'numeric', weekday: 'short' })
+    : '';
+
+  const resetDemographicsEditor = () => {
+    setHeightCm(profile?.heightCm ? String(profile.heightCm) : '');
+    setAge(profile?.age ? String(profile.age) : '');
+    setProfileMessage('');
+    setShowDemographicsEditor(false);
+  };
 
   const handleSaveProfile = async (event) => {
     event.preventDefault();
     const parsedHeight = Number(heightCm);
     const parsedAge = Number(age);
-    const parsedTargetWeight = targetWeightKg === '' ? null : Number(targetWeightKg);
     if (!Number.isFinite(parsedHeight) || parsedHeight < 120 || parsedHeight > 230 || !Number.isInteger(parsedAge) || parsedAge < 18 || parsedAge > 100) {
       setProfileMessage('請輸入 120–230 公分的身高，以及 18–100 歲的整數年齡。');
-      return;
-    }
-    if (parsedTargetWeight !== null && (!Number.isFinite(parsedTargetWeight) || parsedTargetWeight < 20 || parsedTargetWeight > 300)) {
-      setProfileMessage('目標體重請輸入 20–300 kg。');
-      return;
-    }
-    if (parsedTargetWeight !== null && snapshot.firstWeightKg !== null && parsedTargetWeight >= snapshot.firstWeightKg) {
-      setProfileMessage(`目標體重需低於第一筆紀錄 ${snapshot.firstWeightKg} kg。`);
       return;
     }
     setIsSavingProfile(true);
@@ -1440,15 +1457,51 @@ function HealthInsightPanel({ appUser, logs }) {
         username: appUser.username,
         heightCm: parsedHeight,
         age: parsedAge,
-        targetWeightKg: parsedTargetWeight,
         updatedAt: new Date().toISOString()
       }, { merge: true });
-      setProfileMessage('個人健康資料已安全同步到雲端。');
+      setProfileMessage('身高與年齡已更新。');
+      setShowDemographicsEditor(false);
     } catch (error) {
       console.error('儲存個人健康資料失敗:', error);
       setProfileMessage('儲存失敗，請稍後再試。');
     }
     setIsSavingProfile(false);
+  };
+
+  const handleSaveGoal = async (event) => {
+    event.preventDefault();
+    const parsedTargetWeight = targetWeightKg === '' ? null : Number(targetWeightKg);
+    if (parsedTargetWeight !== null && (!Number.isFinite(parsedTargetWeight) || parsedTargetWeight < 20 || parsedTargetWeight > 300)) {
+      setGoalMessage('目標體重請輸入 20–300 kg。');
+      return;
+    }
+    if (parsedTargetWeight !== null && snapshot.firstWeightKg !== null && parsedTargetWeight >= snapshot.firstWeightKg) {
+      setGoalMessage(`目標體重需低於第一筆紀錄 ${snapshot.firstWeightKg} kg。`);
+      return;
+    }
+    if (targetDate && targetDate < todayKey) {
+      setGoalMessage('預計達成日期不可早於今天。');
+      return;
+    }
+    if (parsedTargetWeight === null && targetDate) {
+      setGoalMessage('請先輸入目標體重，再設定預計達成日期。');
+      return;
+    }
+    setIsSavingGoal(true);
+    setGoalMessage('');
+    try {
+      await setDoc(doc(db, 'mounjaroProfiles', appUser.username), {
+        username: appUser.username,
+        targetWeightKg: parsedTargetWeight,
+        targetDate: parsedTargetWeight === null ? null : targetDate || null,
+        updatedAt: new Date().toISOString()
+      }, { merge: true });
+      setGoalMessage(parsedTargetWeight === null ? '目標設定已清除。' : '目標體重與日期已更新。');
+    } catch (error) {
+      console.error('儲存目標設定失敗:', error);
+      setGoalMessage('目標儲存失敗，請稍後再試。');
+    }
+    setIsSavingGoal(false);
   };
 
   return (
@@ -1461,6 +1514,23 @@ function HealthInsightPanel({ appUser, logs }) {
             </div>
             <h2 className="mt-3 text-xl font-black text-slate-900">體重與個人目標</h2>
             <p className="mt-1 text-sm text-slate-600">集中查看目前數值與目標完成進度。</p>
+            <button
+              type="button"
+              onClick={() => {
+                if (showDemographicsEditor) {
+                  resetDemographicsEditor();
+                } else {
+                  setHeightCm(profile?.heightCm ? String(profile.heightCm) : '');
+                  setAge(profile?.age ? String(profile.age) : '');
+                  setProfileMessage('');
+                  setShowDemographicsEditor(true);
+                }
+              }}
+              className="mt-3 inline-flex min-h-[40px] items-center rounded-full border-2 border-[#343434] bg-white px-4 py-2 text-xs font-black text-slate-700 shadow-[2px_2px_0_rgba(52,52,52,.1)] hover:bg-[#e9f5fb]"
+            >
+              {showDemographicsEditor ? '收合身高／年齡' : '✎ 更新身高／年齡'}
+            </button>
+            {!showDemographicsEditor && profileMessage && <p className="mt-2 text-xs font-bold text-emerald-700">{profileMessage}</p>}
           </div>
           <div className="rounded-2xl border-2 border-[#343434] bg-[#fff4bd] px-4 py-3 text-xs leading-relaxed text-[#5f4c19] shadow-[3px_3px_0_rgba(52,52,52,.1)] sm:max-w-xs">
             請勿只依體重趨勢自行調整劑量；任何調整都應由開藥醫療人員評估。
@@ -1469,29 +1539,27 @@ function HealthInsightPanel({ appUser, logs }) {
       </div>
 
       <div className="space-y-5 p-5 sm:p-6">
-        <form onSubmit={handleSaveProfile} className="rounded-2xl border border-slate-200 bg-[#fbf8f0] p-4">
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-[1fr_1fr_1fr_auto] lg:items-end">
-            <div>
-              <label className="mb-1 block text-xs font-bold text-slate-600">身高（cm）</label>
-              <input type="number" min="120" max="230" step="0.1" value={heightCm} onChange={event => { setHeightCm(event.target.value); setProfileMessage(''); }} placeholder="例如 168" className="w-full rounded-xl border px-3 py-2.5" />
+        {showDemographicsEditor && (
+          <form onSubmit={handleSaveProfile} className="animation-fade-in rounded-2xl border border-slate-200 bg-[#fbf8f0] p-4">
+            <div className="grid gap-4 sm:grid-cols-[1fr_1fr_auto] sm:items-end">
+              <div>
+                <label className="mb-1 block text-xs font-bold text-slate-600">身高（cm）</label>
+                <input type="number" min="120" max="230" step="0.1" value={heightCm} onChange={event => { setHeightCm(event.target.value); setProfileMessage(''); }} placeholder="例如 168" className="w-full rounded-xl border px-3 py-2.5" />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-bold text-slate-600">年齡</label>
+                <input type="number" min="18" max="100" step="1" value={age} onChange={event => { setAge(event.target.value); setProfileMessage(''); }} placeholder="例如 35" className="w-full rounded-xl border px-3 py-2.5" />
+              </div>
+              <div className="grid grid-cols-2 gap-2 sm:flex">
+                <button type="button" onClick={resetDemographicsEditor} className="min-h-[44px] rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-bold text-slate-600">取消</button>
+                <button type="submit" disabled={isSavingProfile} className="min-h-[44px] rounded-xl border-2 border-[#343434] bg-[#7db9e8] px-5 py-2.5 text-sm font-black text-[#252525] shadow-[3px_3px_0_rgba(52,52,52,.12)] hover:bg-[#92c7ed] disabled:bg-slate-200">
+                  {isSavingProfile ? '同步中...' : '儲存'}
+                </button>
+              </div>
             </div>
-            <div>
-              <label className="mb-1 block text-xs font-bold text-slate-600">年齡</label>
-              <input type="number" min="18" max="100" step="1" value={age} onChange={event => { setAge(event.target.value); setProfileMessage(''); }} placeholder="例如 35" className="w-full rounded-xl border px-3 py-2.5" />
-            </div>
-            <div>
-              <label className="mb-1 block text-xs font-bold text-slate-600">目標體重（kg）</label>
-              <input type="number" min="20" max="300" step="0.1" value={targetWeightKg} onChange={event => { setTargetWeightKg(event.target.value); setProfileMessage(''); }} placeholder="例如 75" className="w-full rounded-xl border px-3 py-2.5" />
-            </div>
-            <button type="submit" disabled={isSavingProfile} className="min-h-[44px] rounded-xl border-2 border-[#343434] bg-[#7db9e8] px-5 py-2.5 text-sm font-black text-[#252525] shadow-[3px_3px_0_rgba(52,52,52,.12)] hover:bg-[#92c7ed] disabled:bg-slate-200 sm:col-span-2 lg:col-span-1">
-              {isSavingProfile ? '同步中...' : profile ? '更新資料' : '建立資料'}
-            </button>
-          </div>
-          <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-xs">
-            <p className="text-slate-500">目標進度以第一筆體重為起點；BMI 僅供數值參考。</p>
-            {profileMessage && <p className={profileMessage.includes('失敗') || profileMessage.includes('請輸入') || profileMessage.includes('需低於') ? 'text-red-600' : 'text-emerald-700'}>{profileMessage}</p>}
-          </div>
-        </form>
+            {profileMessage && <p className="mt-2 text-xs font-bold text-red-600">{profileMessage}</p>}
+          </form>
+        )}
 
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           <div className="rounded-2xl border border-slate-200 bg-white p-4">
@@ -1517,6 +1585,18 @@ function HealthInsightPanel({ appUser, logs }) {
             <div>
               <p className="text-sm font-black text-slate-800">目標體重進度</p>
               <p className="mt-1 text-xs text-slate-500">從第一筆體重開始計算</p>
+              {savedTargetDate && (
+                <p className={`mt-1 text-xs font-bold ${goalDaysRemaining < 0 && !goalReached ? 'text-red-600' : 'text-sky-700'}`}>
+                  預計 {targetDateLabel}
+                  {goalReached
+                    ? '・目標已達成'
+                    : goalDaysRemaining > 0
+                      ? `・剩餘 ${goalDaysRemaining} 天`
+                      : goalDaysRemaining === 0
+                        ? '・預計今天達成'
+                        : `・已超過 ${Math.abs(goalDaysRemaining)} 天`}
+                </p>
+              )}
             </div>
             {hasGoal && (
               <span className={`rounded-full px-3 py-1 text-xs font-black ${goalReached ? 'bg-emerald-100 text-emerald-800' : 'bg-white text-sky-800'}`}>
@@ -1524,6 +1604,25 @@ function HealthInsightPanel({ appUser, logs }) {
               </span>
             )}
           </div>
+
+          <form onSubmit={handleSaveGoal} className="mt-4 grid gap-3 rounded-xl border border-slate-200 bg-white/70 p-3 sm:grid-cols-[1fr_1.25fr_auto] sm:items-end">
+            <div>
+              <label className="mb-1 block text-xs font-bold text-slate-600">目標體重（kg）</label>
+              <input type="number" min="20" max="300" step="0.1" value={targetWeightKg} onChange={event => { setTargetWeightKg(event.target.value); setGoalMessage(''); }} placeholder="例如 75" className="w-full rounded-xl border px-3 py-2.5" />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-bold text-slate-600">預計達成日期（選填）</label>
+              <input type="date" min={todayKey} value={targetDate} onChange={event => { setTargetDate(event.target.value); setGoalMessage(''); }} className="w-full rounded-xl border px-3 py-2.5" />
+            </div>
+            <button type="submit" disabled={isSavingGoal} className="min-h-[44px] rounded-xl border-2 border-[#343434] bg-[#86bf8c] px-5 py-2.5 text-sm font-black text-[#252525] shadow-[3px_3px_0_rgba(52,52,52,.12)] hover:bg-[#9bcca0] disabled:bg-slate-200">
+              {isSavingGoal ? '同步中...' : hasSavedTarget ? '更新目標' : '設定目標'}
+            </button>
+          </form>
+          {goalMessage && (
+            <p className={`mt-2 text-xs font-bold ${goalMessage.includes('已更新') || goalMessage.includes('已清除') ? 'text-emerald-700' : 'text-red-600'}`}>
+              {goalMessage}
+            </p>
+          )}
 
           {!hasGoal ? (
             <div className="mt-4 rounded-xl border border-dashed border-sky-300 bg-white/70 px-4 py-5 text-center text-sm text-slate-600">
