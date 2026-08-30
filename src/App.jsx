@@ -451,14 +451,14 @@ function TrendChart({ logs }) {
   const rangeW = maxWeight - minWeight === 0 ? 10 : maxWeight - minWeight;
   const rangeD = maxDose - minDose === 0 ? 5 : maxDose - minDose;
 
-  // 資料多時增加實際畫布寬度，維持固定高度，避免整張 SVG 被放大造成文字重疊
-  const pointGap = chartData.length > 12 ? 58 : 48;
-  const svgW = Math.max(600, (chartData.length - 1) * pointGap + 96);
+  // 手機一次呈現更多資料點；資料越多時稍微壓縮間距，再降低標籤密度避免重疊
+  const pointGap = chartData.length > 20 ? 36 : chartData.length > 12 ? 40 : 44;
+  const svgW = Math.max(440, (chartData.length - 1) * pointGap + 80);
   const svgH = 250;
-  const padX = 48; const padY = 38;
+  const padX = 40; const padY = 38;
   const innerW = svgW - padX * 2;
   const innerH = svgH - padY * 2;
-  const labelStep = Math.max(1, Math.ceil(chartData.length / 16));
+  const labelStep = Math.max(1, Math.ceil(chartData.length / 10));
 
   // 比例換算函式
   const getX = (idx) => padX + (idx / (chartData.length - 1)) * innerW;
