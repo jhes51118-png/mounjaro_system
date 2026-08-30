@@ -419,6 +419,16 @@ function LogExtraDetails({ log, noteClassName = 'bg-slate-50' }) {
 }
 
 function TrendChart({ logs }) {
+  const [rangeDays, setRangeDays] = useState(30);
+  const sortedLogs = [...(logs || [])].sort((a, b) => new Date(a.date) - new Date(b.date));
+  const latestDate = sortedLogs.length ? new Date(`${sortedLogs[sortedLogs.length - 1].date}T12:00:00`) : null;
+  const chartData = rangeDays === 'all' || !latestDate
+    ? sortedLogs
+    : sortedLogs.filter(log => {
+        const logDate = new Date(`${log.date}T12:00:00`);
+        return (latestDate.getTime() - logDate.getTime()) <= (rangeDays - 1) * 24 * 60 * 60 * 1000;
+      });
+
   // 資料少於2筆不畫圖
   if (!logs || logs.length < 2) {
     return (
@@ -428,9 +438,6 @@ function TrendChart({ logs }) {
       </div>
     );
   }
-
-  // 將資料按日期從舊到新排序 (由左至右)
-  const chartData = [...logs].sort((a, b) => new Date(a.date) - new Date(b.date));
 
   // 計算體重與劑量的最大/最小值，用來做圖表比例尺
   const weights = chartData.map(d => d.weight);
@@ -474,6 +481,17 @@ function TrendChart({ logs }) {
           <div className="flex items-center"><span className="w-3 h-3 rounded-full bg-emerald-400 mr-1.5"></span>劑量 (mg)</div>
         </div>
       </div>
+      <div className="mb-3 grid grid-cols-3 gap-2 px-1 sm:max-w-xs sm:px-2" aria-label="趨勢顯示範圍">
+        {[{ value: 7, label: '最近 7 天' }, { value: 30, label: '最近 30 天' }, { value: 'all', label: '全部' }].map(option => (
+          <button key={option.value} type="button" aria-pressed={rangeDays === option.value} onClick={() => setRangeDays(option.value)} className={`min-h-[44px] rounded-lg border px-2 py-2 text-xs font-bold ${rangeDays === option.value ? 'border-sky-500 bg-sky-100 text-sky-800' : 'border-slate-200 bg-white text-slate-600'}`}>
+            {option.label}
+          </button>
+        ))}
+      </div>
+      {chartData.length < 2 ? (
+        <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 px-4 py-8 text-center text-sm text-slate-500">此區間不足 2 筆紀錄，請切換較長範圍。</div>
+      ) : (
+      <>
       {chartData.length > 10 && <p className="mb-2 px-1 text-[11px] font-medium text-slate-500 sm:px-2">← 左右滑動可查看全部 {chartData.length} 筆紀錄 →</p>}
       
       {/* 讓圖表在手機上可以滑動 */}
@@ -516,6 +534,8 @@ function TrendChart({ logs }) {
             })}
           </svg>
       </div>
+      </>
+      )}
     </div>
   );
 }
@@ -932,6 +952,8 @@ function CalculatorView({ appUser, usersList, allLogs, allSchedules, sharingPlan
     fullInjections = Math.floor(clicks / 60);
     remainingClicks = clicks % 60;
   }
+  const completeDoseCount = targetDose > 0 ? Math.floor(totalDoses + 0.0001) : 0;
+  const remainingDoseMg = targetDose > 0 ? Math.max(0, (penStrength * 4) - (completeDoseCount * targetDose)) : 0;
 
   return (
     <div className="space-y-6 animation-fade-in">
@@ -974,7 +996,7 @@ function CalculatorView({ appUser, usersList, allLogs, allSchedules, sharingPlan
 
       <div className="bg-gradient-to-br from-indigo-600 to-purple-700 rounded-2xl shadow-lg p-1">
         <div className="bg-white/95 backdrop-blur-sm rounded-[14px] p-6 sm:p-8">
-          <h3 className="text-center text-slate-500 font-medium mb-2">請旋轉筆針撥號盤</h3>
+          <h3 className="text-center text-slate-500 font-medium mb-2">換算結果（格數）</h3>
           {isExceeding ? (
             <div className="text-center py-6">
               <div className="inline-flex items-center justify-center w-12 h-12 bg-red-100 rounded-full mb-3"><AlertTriangle /></div>
@@ -1005,13 +1027,17 @@ function CalculatorView({ appUser, usersList, allLogs, allSchedules, sharingPlan
               )}
               <div className="w-full grid grid-cols-2 gap-4 mt-4 border-t border-slate-100 pt-4">
                 <div className="text-center">
-                  <p className="text-xs text-slate-400 mb-1">一支筆可打次數</p>
-                  <p className="text-lg font-bold text-slate-700">{totalDoses.toFixed(1)} <span className="text-xs font-normal text-slate-500">次</span></p>
+                  <p className="text-xs text-slate-400 mb-1">可完整施打</p>
+                  <p className="text-lg font-bold text-slate-700">約 {completeDoseCount} <span className="text-xs font-normal text-slate-500">次</span></p>
+                  {remainingDoseMg > 0.05 && <p className="mt-1 text-[11px] text-slate-500">估算剩餘 {remainingDoseMg.toFixed(1)} mg</p>}
                 </div>
                 <div className="text-center">
                   <p className="text-xs text-slate-400 mb-1">預估使用時間</p>
-                  <p className="text-lg font-bold text-slate-700">{Math.floor(totalDoses)} <span className="text-xs font-normal text-slate-500">週</span></p>
+                  <p className="text-lg font-bold text-slate-700">{completeDoseCount} <span className="text-xs font-normal text-slate-500">週</span></p>
                 </div>
+              </div>
+              <div className="mt-4 w-full rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs font-medium leading-relaxed text-amber-900">
+                僅供劑量與庫存換算，不作為施打指示；實際劑量與操作方式請依醫師、藥師及原廠說明。
               </div>
             </div>
           ) : (
@@ -1335,7 +1361,7 @@ function ScheduleView({ appUser, userSchedule, allLogs, inventory, sharingPlans,
       
       {isCustomized && (
         <div className="mb-6 flex justify-end">
-          <button onClick={() => { setIsCustomized(false); setEditingIndex(null); }} className="text-sm px-3 py-1.5 bg-indigo-50 text-indigo-600 rounded-lg hover:bg-indigo-100 transition-colors flex items-center shadow-sm border border-indigo-100">
+          <button onClick={() => { setIsCustomized(false); setEditingIndex(null); }} className="min-h-[44px] text-sm px-3 py-2 bg-indigo-50 text-indigo-600 rounded-lg hover:bg-indigo-100 transition-colors flex items-center shadow-sm border border-indigo-100">
             <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mr-1.5"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
             重置為標準遞增計畫
           </button>
@@ -1345,7 +1371,7 @@ function ScheduleView({ appUser, userSchedule, allLogs, inventory, sharingPlans,
       <div className="bg-indigo-50 border border-indigo-100 rounded-xl p-4 mb-6 text-sm text-indigo-800">
         <p className="flex items-start">
           <span className="mt-0.5 mr-2"><InfoIcon /></span>
-          <span>此計畫表依據原廠建議遞增。<strong>游標移至列表右側可點擊修改圖示</strong>，針對特定日期與劑量進行手動微調。實際施打請依醫囑為準。</span>
+          <span>此計畫表依據原廠建議遞增。<strong>點擊每週卡片右上角的鉛筆圖示</strong>，即可調整日期與劑量。實際施打請依醫囑為準。</span>
         </p>
       </div>
 
@@ -1373,10 +1399,10 @@ function ScheduleView({ appUser, userSchedule, allLogs, inventory, sharingPlans,
                       </div>
                     </div>
                     <div className="flex justify-end gap-2 pt-2 border-t border-indigo-100 mt-3">
-                      <button onClick={() => setEditingIndex(null)} className="px-3 py-1.5 text-sm font-medium text-slate-600 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 flex items-center transition-colors">
+                      <button onClick={() => setEditingIndex(null)} className="min-h-[44px] px-3 py-2 text-sm font-medium text-slate-600 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 flex items-center transition-colors">
                         <XIcon /> <span className="ml-1">取消</span>
                       </button>
-                      <button onClick={() => handleSaveEdit(index)} className="px-3 py-1.5 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 flex items-center shadow-sm transition-colors">
+                      <button onClick={() => handleSaveEdit(index)} className="min-h-[44px] px-3 py-2 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 flex items-center shadow-sm transition-colors">
                         <CheckIcon /> <span className="ml-1">儲存微調</span>
                       </button>
                     </div>
@@ -1387,7 +1413,7 @@ function ScheduleView({ appUser, userSchedule, allLogs, inventory, sharingPlans,
                       <span className="text-sm font-semibold text-slate-500">第 {item.week} 週</span>
                       <div className="flex items-center space-x-3">
                         <span className="text-sm text-slate-500">{item.date.toLocaleDateString('zh-TW')}</span>
-                        <button onClick={() => handleEditClick(index, item)} className="text-slate-400 hover:text-indigo-600 transition-colors md:opacity-0 md:group-hover:opacity-100 focus:opacity-100 p-1 rounded hover:bg-indigo-50" title="手動微調">
+                        <button onClick={() => handleEditClick(index, item)} className="inline-flex h-11 w-11 items-center justify-center rounded-lg text-slate-500 transition-colors hover:bg-indigo-50 hover:text-indigo-600 md:opacity-0 md:group-hover:opacity-100 focus:opacity-100" title="手動微調" aria-label={`微調第 ${item.week} 週計畫`}>
                           <PencilIcon />
                         </button>
                       </div>
@@ -1734,6 +1760,9 @@ function LogView({ appUser, allLogs }) {
   const [editSymptoms, setEditSymptoms] = useState([]);
   const [editMood, setEditMood] = useState('');
   const [editError, setEditError] = useState('');
+  const [duplicateLog, setDuplicateLog] = useState(null);
+  const [historyLimit, setHistoryLimit] = useState(10);
+  const [collapsedHistoryMonths, setCollapsedHistoryMonths] = useState([]);
 
   const myLogs = allLogs.filter(log => log.username === appUser.username);
 
@@ -1745,14 +1774,13 @@ function LogView({ appUser, allLogs }) {
     setEditSymptoms(current => current.includes(symptom) ? current.filter(item => item !== symptom) : [...current, symptom]);
   };
 
-  const handleAddLog = async (e) => {
-    e.preventDefault();
+  const saveNewLog = async (replaceLogId = null) => {
     if (!date || !weight || (recordType === 'injection' && !dose) || !db || isSubmitting) return;
 
     setIsSubmitting(true);
     try {
-      const logRef = doc(collection(db, 'mounjaroLogs'));
-      await setDoc(logRef, {
+      const logRef = replaceLogId ? doc(db, 'mounjaroLogs', replaceLogId) : doc(collection(db, 'mounjaroLogs'));
+      const logData = {
         username: appUser.username,
         recordType,
         date,
@@ -1761,16 +1789,29 @@ function LogView({ appUser, allLogs }) {
         symptoms,
         mood,
         notes,
-        createdAt: new Date().toISOString()
-      });
+        ...(replaceLogId ? { updatedAt: new Date().toISOString() } : { createdAt: new Date().toISOString() })
+      };
+      if (replaceLogId) await setDoc(logRef, logData, { merge: true });
+      else await setDoc(logRef, logData);
       setWeight('');
       setNotes('');
       setSymptoms([]);
       setMood('');
+      setDuplicateLog(null);
     } catch (error) {
       console.error("寫入紀錄失敗:", error);
     }
     setIsSubmitting(false);
+  };
+
+  const handleAddLog = async (e) => {
+    e.preventDefault();
+    const sameDateLog = myLogs.find(log => log.date === date);
+    if (sameDateLog) {
+      setDuplicateLog(sameDateLog);
+      return;
+    }
+    await saveNewLog();
   };
 
   const handleDelete = async (id) => {
@@ -1890,7 +1931,7 @@ function LogView({ appUser, allLogs }) {
             <label className="block text-sm font-medium text-slate-600 mb-2">常見不舒服症狀 (可複選)</label>
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
               {COMMON_SYMPTOMS.map(symptom => (
-                <label key={symptom} className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-sm cursor-pointer transition-colors ${symptoms.includes(symptom) ? 'bg-amber-50 border-amber-300 text-amber-800' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'}`}>
+                <label key={symptom} className={`flex min-h-[44px] items-center gap-2 px-3 py-2 rounded-lg border text-sm cursor-pointer transition-colors ${symptoms.includes(symptom) ? 'bg-amber-50 border-amber-300 text-amber-800' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'}`}>
                   <input
                     type="checkbox"
                     checked={symptoms.includes(symptom)}
@@ -1915,6 +1956,17 @@ function LogView({ appUser, allLogs }) {
             <textarea value={notes} onChange={e => setNotes(e.target.value)} placeholder={recordType === 'injection' ? '例如：打完第二天有點微噁心、食慾明顯下降...' : '例如：今天精神不錯、食慾正常...'} rows="2"
               className="w-full border border-slate-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-indigo-500 resize-none"></textarea>
           </div>
+          {duplicateLog && (
+            <div role="alert" className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">
+              <p className="font-black">{formatLogDate(date)} 已有一筆紀錄</p>
+              <p className="mt-1 text-xs leading-relaxed">請選擇更新原紀錄，或保留原資料並新增另一筆。</p>
+              <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
+                <button type="button" disabled={isSubmitting} onClick={() => saveNewLog(duplicateLog.id)} className="min-h-[44px] rounded-lg bg-amber-600 px-3 py-2 text-xs font-bold text-white disabled:bg-slate-300">更新原紀錄</button>
+                <button type="button" disabled={isSubmitting} onClick={() => saveNewLog()} className="min-h-[44px] rounded-lg border border-amber-400 bg-white px-3 py-2 text-xs font-bold text-amber-800 disabled:text-slate-400">仍新增一筆</button>
+                <button type="button" onClick={() => setDuplicateLog(null)} className="min-h-[44px] rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-600">返回修改</button>
+              </div>
+            </div>
+          )}
           <button type="submit" disabled={isSubmitting} className={`w-full font-medium py-3 rounded-xl transition-colors shadow-sm ${isSubmitting ? 'bg-slate-400 text-white cursor-not-allowed' : 'bg-indigo-600 hover:bg-indigo-700 text-white'}`}>
             {isSubmitting ? '儲存中...' : recordType === 'injection' ? '儲存施打與體重' : '儲存體重紀錄'}
           </button>
@@ -1929,21 +1981,32 @@ function LogView({ appUser, allLogs }) {
           </div>
         ) : (
           <div className="space-y-3">
-            {myLogs.map((log, index) => {
+            {myLogs.slice(0, historyLimit).map((log, index, visibleLogs) => {
               let weightDiff = null;
               if (index < myLogs.length - 1) {
                 const prevWeight = myLogs[index + 1].weight;
                 weightDiff = (log.weight - prevWeight).toFixed(1);
               }
+              const monthKey = log.date?.slice(0, 7) || 'unknown';
+              const showMonthHeader = index === 0 || visibleLogs[index - 1]?.date?.slice(0, 7) !== monthKey;
+              const isMonthCollapsed = collapsedHistoryMonths.includes(monthKey);
+              const monthLabel = monthKey === 'unknown' ? '日期未設定' : new Date(`${monthKey}-01T12:00:00`).toLocaleDateString('zh-TW', { year: 'numeric', month: 'long' });
               return (
+                <React.Fragment key={log.id}>
+                {showMonthHeader && (
+                  <button type="button" aria-expanded={!isMonthCollapsed} onClick={() => setCollapsedHistoryMonths(months => months.includes(monthKey) ? months.filter(item => item !== monthKey) : [...months, monthKey])} className="flex min-h-[44px] w-full items-center justify-between rounded-xl bg-slate-100 px-4 py-2 text-left text-sm font-black text-slate-700">
+                    <span>{monthLabel}</span><span aria-hidden="true">{isMonthCollapsed ? '＋' : '－'}</span>
+                  </button>
+                )}
+                {!isMonthCollapsed && (
                 <div key={log.id} className="relative group bg-white border border-slate-200 p-4 rounded-xl hover:border-indigo-300 transition-colors">
                   {editingLogId === log.id ? (
                     <form onSubmit={handleUpdateLog} className="space-y-4">
                       <div>
                         <label className="block text-xs font-medium text-slate-500 mb-2">紀錄類型</label>
                         <div className="grid grid-cols-2 gap-2">
-                          <button type="button" onClick={() => setEditRecordType('weight')} className={`rounded-lg border px-3 py-2 text-xs font-bold ${editRecordType === 'weight' ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-slate-200 text-slate-500'}`}>⚖️ 只記錄體重</button>
-                          <button type="button" onClick={() => setEditRecordType('injection')} className={`rounded-lg border px-3 py-2 text-xs font-bold ${editRecordType === 'injection' ? 'border-emerald-500 bg-emerald-50 text-emerald-700' : 'border-slate-200 text-slate-500'}`}>💉 施打＋體重</button>
+                          <button type="button" onClick={() => setEditRecordType('weight')} className={`min-h-[44px] rounded-lg border px-3 py-2 text-xs font-bold ${editRecordType === 'weight' ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-slate-200 text-slate-500'}`}>⚖️ 只記錄體重</button>
+                          <button type="button" onClick={() => setEditRecordType('injection')} className={`min-h-[44px] rounded-lg border px-3 py-2 text-xs font-bold ${editRecordType === 'injection' ? 'border-emerald-500 bg-emerald-50 text-emerald-700' : 'border-slate-200 text-slate-500'}`}>💉 施打＋體重</button>
                         </div>
                       </div>
                       <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
@@ -1969,7 +2032,7 @@ function LogView({ appUser, allLogs }) {
                         <label className="block text-xs font-medium text-slate-500 mb-2">常見不舒服症狀</label>
                         <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                           {COMMON_SYMPTOMS.map(symptom => (
-                            <label key={symptom} className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-xs cursor-pointer transition-colors ${editSymptoms.includes(symptom) ? 'bg-amber-50 border-amber-300 text-amber-800' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'}`}>
+                            <label key={symptom} className={`flex min-h-[44px] items-center gap-2 px-3 py-2 rounded-lg border text-xs cursor-pointer transition-colors ${editSymptoms.includes(symptom) ? 'bg-amber-50 border-amber-300 text-amber-800' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'}`}>
                               <input
                                 type="checkbox"
                                 checked={editSymptoms.includes(symptom)}
@@ -2025,10 +2088,10 @@ function LogView({ appUser, allLogs }) {
                           </div>
                         </div>
                         <div className="flex gap-1">
-                          <button onClick={() => startEditLog(log)} className="px-3 py-2 text-xs font-medium text-indigo-600 hover:text-indigo-700 transition-colors rounded-lg hover:bg-indigo-50">
+                          <button onClick={() => startEditLog(log)} className="min-h-[44px] px-3 py-2 text-xs font-medium text-indigo-600 hover:text-indigo-700 transition-colors rounded-lg hover:bg-indigo-50">
                             修改
                           </button>
-                          <button onClick={() => handleDelete(log.id)} className="p-2 text-slate-400 hover:text-red-500 transition-colors rounded-lg hover:bg-red-50">
+                          <button onClick={() => handleDelete(log.id)} className="inline-flex h-11 w-11 items-center justify-center rounded-lg text-slate-500 transition-colors hover:bg-red-50 hover:text-red-500" aria-label={`刪除 ${formatLogDate(log.date)} 的紀錄`}>
                             <TrashIcon />
                           </button>
                         </div>
@@ -2037,8 +2100,15 @@ function LogView({ appUser, allLogs }) {
                     </>
                   )}
                 </div>
+                )}
+                </React.Fragment>
               );
             })}
+            {historyLimit < myLogs.length && (
+              <button type="button" onClick={() => setHistoryLimit(limit => limit + 10)} className="min-h-[44px] w-full rounded-xl border border-slate-300 bg-slate-50 px-4 py-3 text-sm font-bold text-slate-700 hover:bg-slate-100">
+                顯示更多（尚有 {myLogs.length - historyLimit} 筆）
+              </button>
+            )}
           </div>
         )}
       </div>
@@ -2056,6 +2126,12 @@ function AdminView({ appUser, usersList, allLogs, allSchedules, allProfiles, sha
   // 🕵️ 紀錄管理員目前選中了哪一個使用者來查看詳細資料
   const [selectedUser, setSelectedUser] = useState(null);
   const [adminDetailTab, setAdminDetailTab] = useState('logs');
+  const [logUserFilter, setLogUserFilter] = useState('all');
+  const [logTypeFilter, setLogTypeFilter] = useState('all');
+  const [logDateRange, setLogDateRange] = useState('30');
+  const [visibleAdminLogs, setVisibleAdminLogs] = useState(10);
+  const [adminDetailLimit, setAdminDetailLimit] = useState(10);
+  const [collapsedAdminMonths, setCollapsedAdminMonths] = useState([]);
 
   const handleCreateUser = async (e) => {
     e.preventDefault();
@@ -2126,6 +2202,18 @@ function AdminView({ appUser, usersList, allLogs, allSchedules, allProfiles, sha
   const managedUsers = usersList.filter(user => user.role !== 'admin');
   const managedUsernames = new Set(managedUsers.map(user => user.username));
   const managedLogs = allLogs.filter(log => managedUsernames.has(log.username));
+  const filteredManagedLogs = managedLogs.filter(log => {
+    if (logUserFilter !== 'all' && log.username !== logUserFilter) return false;
+    if (logTypeFilter === 'injection' && !isInjectionLog(log)) return false;
+    if (logTypeFilter === 'weight' && isInjectionLog(log)) return false;
+    if (logDateRange !== 'all') {
+      const cutoff = new Date();
+      cutoff.setHours(0, 0, 0, 0);
+      cutoff.setDate(cutoff.getDate() - (Number(logDateRange) - 1));
+      if (new Date(`${log.date}T12:00:00`) < cutoff) return false;
+    }
+    return true;
+  });
 
   // 如果點擊了某個使用者，顯示專屬詳細檔案與圖表
   if (selectedUser) {
@@ -2198,13 +2286,24 @@ function AdminView({ appUser, usersList, allLogs, allSchedules, allProfiles, sha
             <p className="text-sm text-slate-400">此使用者尚無任何紀錄。</p>
           ) : (
             <div className="space-y-3">
-              {targetUserLogs.map((log, index) => {
+              {targetUserLogs.slice(0, adminDetailLimit).map((log, index, visibleLogs) => {
                 let weightDiff = null;
                 if (index < targetUserLogs.length - 1) {
                   const prevWeight = targetUserLogs[index + 1].weight;
                   weightDiff = (log.weight - prevWeight).toFixed(1);
                 }
+                const monthKey = log.date?.slice(0, 7) || 'unknown';
+                const showMonthHeader = index === 0 || visibleLogs[index - 1]?.date?.slice(0, 7) !== monthKey;
+                const isMonthCollapsed = collapsedAdminMonths.includes(monthKey);
+                const monthLabel = monthKey === 'unknown' ? '日期未設定' : new Date(`${monthKey}-01T12:00:00`).toLocaleDateString('zh-TW', { year: 'numeric', month: 'long' });
                 return (
+                  <React.Fragment key={log.id}>
+                  {showMonthHeader && (
+                    <button type="button" aria-expanded={!isMonthCollapsed} onClick={() => setCollapsedAdminMonths(months => months.includes(monthKey) ? months.filter(item => item !== monthKey) : [...months, monthKey])} className="flex min-h-[44px] w-full items-center justify-between rounded-xl bg-slate-100 px-4 py-2 text-left text-sm font-black text-slate-700">
+                      <span>{monthLabel}</span><span aria-hidden="true">{isMonthCollapsed ? '＋' : '－'}</span>
+                    </button>
+                  )}
+                  {!isMonthCollapsed && (
                   <div key={log.id} className="bg-slate-50 border border-slate-100 p-4 rounded-xl">
                     <div className="flex flex-wrap justify-between items-start gap-2">
                       <div>
@@ -2229,8 +2328,15 @@ function AdminView({ appUser, usersList, allLogs, allSchedules, allProfiles, sha
                     </div>
                     <LogExtraDetails log={log} noteClassName="bg-white border border-slate-100" />
                   </div>
+                  )}
+                  </React.Fragment>
                 );
               })}
+              {adminDetailLimit < targetUserLogs.length && (
+                <button type="button" onClick={() => setAdminDetailLimit(limit => limit + 10)} className="min-h-[44px] w-full rounded-xl border border-slate-300 bg-slate-50 px-4 py-3 text-sm font-bold text-slate-700">
+                  顯示更多（尚有 {targetUserLogs.length - adminDetailLimit} 筆）
+                </button>
+              )}
             </div>
               )}
             </div>
@@ -2289,10 +2395,14 @@ function AdminView({ appUser, usersList, allLogs, allSchedules, allProfiles, sha
         <h2 className="text-lg font-bold text-indigo-900 mb-4 flex items-center">
           <UsersIcon /> <span className="ml-2">管理員中心：建立新帳號</span>
         </h2>
-        <form onSubmit={handleCreateUser} className="flex flex-col sm:flex-row gap-3">
-          <input type="text" placeholder="輸入新帳號名稱" value={newUsername} onChange={e => setNewUsername(e.target.value)} required className="flex-1 border border-indigo-200 rounded-xl px-4 py-2 focus:ring-2 focus:ring-indigo-500" />
-          <input type="text" placeholder="設定密碼" value={newPassword} onChange={e => setNewPassword(e.target.value)} required className="flex-1 border border-indigo-200 rounded-xl px-4 py-2 focus:ring-2 focus:ring-indigo-500" />
-          <button type="submit" className="bg-indigo-600 hover:bg-indigo-700 text-white font-medium px-6 py-2 rounded-xl transition-colors shadow-sm">新增帳號</button>
+        <form onSubmit={handleCreateUser} className="flex flex-col items-stretch gap-3 sm:flex-row sm:items-end">
+          <label className="flex-1 text-xs font-bold text-indigo-900">新帳號名稱
+            <input type="text" placeholder="輸入新帳號名稱" value={newUsername} onChange={e => setNewUsername(e.target.value)} required className="mt-1 min-h-[44px] w-full border border-indigo-200 rounded-xl px-4 py-2 focus:ring-2 focus:ring-indigo-500" />
+          </label>
+          <label className="flex-1 text-xs font-bold text-indigo-900">初始密碼
+            <input type="text" placeholder="設定密碼" value={newPassword} onChange={e => setNewPassword(e.target.value)} required className="mt-1 min-h-[44px] w-full border border-indigo-200 rounded-xl px-4 py-2 focus:ring-2 focus:ring-indigo-500" />
+          </label>
+          <button type="submit" className="min-h-[44px] bg-indigo-600 hover:bg-indigo-700 text-white font-medium px-6 py-2 rounded-xl transition-colors shadow-sm">新增帳號</button>
         </form>
         {errorMsg && <p className="text-red-500 text-sm mt-3">{errorMsg}</p>}
         {successMsg && <p className="text-green-600 text-sm mt-3">{successMsg}</p>}
@@ -2303,26 +2413,23 @@ function AdminView({ appUser, usersList, allLogs, allSchedules, allProfiles, sha
           <h3 className="font-semibold text-slate-800 mb-4">現有使用者列表 <span className="text-xs font-normal text-slate-400 ml-2">(點擊查看詳情)</span></h3>
           <ul className="space-y-2">
             {managedUsers.map(u => (
-              <li 
-                key={u.id} 
-                onClick={() => setSelectedUser(u)}
-                className="group flex justify-between items-center bg-slate-50 p-3 rounded-lg border border-slate-100 cursor-pointer hover:bg-indigo-50 hover:border-indigo-200 transition-all"
-                title={`查看 ${u.username} 的詳細紀錄`}
-              >
-                <span className="font-medium text-slate-700 group-hover:text-indigo-700">{u.username} <span className="text-xs text-slate-400 font-normal ml-1">({u.role})</span></span>
-                <div className="flex items-center gap-3">
+              <li key={u.id} className="group flex items-center gap-2 rounded-lg border border-slate-100 bg-slate-50 p-2 transition-all hover:border-indigo-200 hover:bg-indigo-50">
+                <button type="button" onClick={() => { setSelectedUser(u); setAdminDetailLimit(10); }} className="min-h-[44px] min-w-0 flex-1 rounded-lg px-2 text-left" aria-label={`查看 ${u.username} 的詳細紀錄`}>
+                  <span className="font-medium text-slate-700 group-hover:text-indigo-700">{u.username} <span className="text-xs text-slate-400 font-normal ml-1">({u.role})</span></span>
+                </button>
+                <div className="flex shrink-0 items-center gap-2">
                   <span className="text-xs text-slate-400">密碼: {u.password}</span>
                   {u.username !== appUser.username && u.role !== 'admin' && (
                     <button
                       type="button"
                       onClick={(event) => handleDeleteUser(u, event)}
                       disabled={isDeletingUser}
-                      className="px-2.5 py-1 text-xs font-bold text-red-500 bg-red-50 hover:bg-red-100 rounded-lg transition-colors disabled:opacity-50"
+                      className="min-h-[44px] px-3 py-2 text-xs font-bold text-red-600 bg-red-50 hover:bg-red-100 rounded-lg transition-colors disabled:opacity-50"
+                      aria-label={`刪除帳號 ${u.username}`}
                     >
-                      刪除
+                      刪除帳號
                     </button>
                   )}
-                  <span className="text-slate-300 group-hover:text-indigo-500 transition-colors"><EyeIcon /></span>
                 </div>
               </li>
             ))}
@@ -2330,9 +2437,27 @@ function AdminView({ appUser, usersList, allLogs, allSchedules, allProfiles, sha
           </ul>
         </div>
         <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 sm:p-6">
-          <h3 className="font-semibold text-slate-800 mb-4">全體數據總覽 (最新50筆)</h3>
+          <h3 className="font-semibold text-slate-800 mb-4">全體數據總覽</h3>
+          <div className="mb-4 grid grid-cols-1 gap-2 sm:grid-cols-3" aria-label="全體紀錄篩選">
+            <label className="text-[11px] font-bold text-slate-500">使用者
+              <select value={logUserFilter} onChange={event => { setLogUserFilter(event.target.value); setVisibleAdminLogs(10); }} className="mt-1 min-h-[44px] w-full rounded-lg border px-2 py-2 text-sm">
+                <option value="all">全部使用者</option>
+                {managedUsers.map(user => <option key={user.username} value={user.username}>{user.username}</option>)}
+              </select>
+            </label>
+            <label className="text-[11px] font-bold text-slate-500">紀錄類型
+              <select value={logTypeFilter} onChange={event => { setLogTypeFilter(event.target.value); setVisibleAdminLogs(10); }} className="mt-1 min-h-[44px] w-full rounded-lg border px-2 py-2 text-sm">
+                <option value="all">全部類型</option><option value="injection">施打紀錄</option><option value="weight">僅體重</option>
+              </select>
+            </label>
+            <label className="text-[11px] font-bold text-slate-500">日期範圍
+              <select value={logDateRange} onChange={event => { setLogDateRange(event.target.value); setVisibleAdminLogs(10); }} className="mt-1 min-h-[44px] w-full rounded-lg border px-2 py-2 text-sm">
+                <option value="7">最近 7 天</option><option value="30">最近 30 天</option><option value="all">全部日期</option>
+              </select>
+            </label>
+          </div>
           <div className="space-y-3 max-h-96 overflow-y-auto pr-2 hide-scrollbar">
-            {managedLogs.slice(0, 50).map(log => (
+            {filteredManagedLogs.slice(0, visibleAdminLogs).map(log => (
               <div key={log.id} className="bg-slate-50 p-3 rounded-lg border border-slate-100 text-sm flex justify-between items-center">
                 <div>
                   <div className="font-bold text-indigo-600 mb-1">{log.username}</div>
@@ -2348,7 +2473,10 @@ function AdminView({ appUser, usersList, allLogs, allSchedules, allProfiles, sha
                 <span className="text-slate-400 text-xs">{formatLogDate(log.date)}</span>
               </div>
             ))}
-            {managedLogs.length === 0 && <p className="text-sm text-slate-400">目前尚無任何使用者紀錄</p>}
+            {filteredManagedLogs.length === 0 && <p className="rounded-lg border border-dashed border-slate-200 bg-slate-50 p-4 text-center text-sm text-slate-400">目前篩選條件沒有紀錄</p>}
+            {visibleAdminLogs < filteredManagedLogs.length && (
+              <button type="button" onClick={() => setVisibleAdminLogs(count => count + 10)} className="min-h-[44px] w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-bold text-slate-700">載入更多（尚有 {filteredManagedLogs.length - visibleAdminLogs} 筆）</button>
+            )}
           </div>
         </div>
       </div>
@@ -2562,32 +2690,32 @@ export default function MounjaroApp() {
       <div className="decorative-blob pointer-events-none fixed -right-28 top-1/3 h-96 w-96 rounded-full bg-[#7db9e8]/20 blur-3xl" style={{ animation: 'floatSoft 10s ease-in-out infinite reverse' }}></div>
 
       <div className="relative z-10 max-w-5xl mx-auto space-y-5 sm:space-y-6">
-        <header className="comic-card relative overflow-hidden rounded-[2rem] bg-[#fffdf7] p-5 sm:p-7">
+        <header className="comic-card relative overflow-hidden rounded-[1.5rem] bg-[#fffdf7] p-4 sm:rounded-[2rem] sm:p-7">
           <div className="absolute -right-10 -top-16 h-44 w-44 rounded-full border-[28px] border-[#7db9e8]/30"></div>
           <div className="absolute bottom-0 right-1/4 h-24 w-24 translate-y-1/2 rounded-full bg-[#f6d15f]/35 blur-xl"></div>
-          <div className="relative flex flex-col sm:flex-row items-start sm:items-center justify-between gap-5">
-            <div className="flex items-center gap-4">
-              <div className="comic-live inline-flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-full border-2 border-[#343434] bg-white"><SnoopyImage className="h-14 w-14" /></div>
+          <div className="relative flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-5">
+            <div className="flex items-center gap-3 sm:gap-4">
+              <div className="comic-live inline-flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-full border-2 border-[#343434] bg-white sm:h-16 sm:w-16"><SnoopyImage className="h-10 w-10 sm:h-14 sm:w-14" /></div>
               <div>
-                <p className="text-xs font-black tracking-[0.12em] text-sky-700">MY WELLNESS DIARY</p>
-                <h1 className="mt-1 text-2xl sm:text-3xl font-black tracking-tight text-slate-900">猛健樂健康日誌</h1>
-                <p className="mt-1 text-sm text-slate-600">嗨，<strong className="text-[#c83f39]">{appUser.username}</strong>・{new Date().toLocaleDateString('zh-TW', { month: 'long', day: 'numeric', weekday: 'long' })}</p>
+                <p className="hidden text-xs font-black tracking-[0.12em] text-sky-700 sm:block">MY WELLNESS DIARY</p>
+                <h1 className="text-xl font-black tracking-tight text-slate-900 sm:mt-1 sm:text-3xl">猛健樂健康日誌</h1>
+                <p className="mt-0.5 text-xs text-slate-600 sm:mt-1 sm:text-sm">嗨，<strong className="text-[#c83f39]">{appUser.username}</strong>・{new Date().toLocaleDateString('zh-TW', { month: 'long', day: 'numeric', weekday: 'long' })}</p>
               </div>
             </div>
             <div className="flex w-full sm:w-auto items-center gap-2">
               <span className="flex-1 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-2 text-center text-xs font-bold text-emerald-700 sm:flex-none"><span className="mr-1 text-emerald-500">●</span> 已同步雲端</span>
-              <button onClick={handleLogout} className="rounded-full border-2 border-[#343434] bg-white px-4 py-2 text-sm font-black text-slate-700 shadow-[2px_2px_0_rgba(52,52,52,.1)] transition-colors hover:bg-[#fff4bd]">登出</button>
+              <button onClick={handleLogout} className="min-h-[44px] rounded-full border-2 border-[#343434] bg-white px-4 py-2 text-sm font-black text-slate-700 shadow-[2px_2px_0_rgba(52,52,52,.1)] transition-colors hover:bg-[#fff4bd]">登出</button>
             </div>
           </div>
         </header>
 
-        <nav aria-label="主要功能" className="sticky top-3 z-30 grid grid-cols-3 gap-1 rounded-2xl border-2 border-[#343434] bg-[#fffdf7]/95 p-1.5 shadow-[4px_5px_0_rgba(52,52,52,.12)] backdrop-blur-xl sm:gap-1.5">
-          <button onClick={() => setActiveTab('calculator')} aria-current={activeTab === 'calculator' ? 'page' : undefined} className={`min-h-[58px] min-w-0 whitespace-nowrap rounded-xl px-1 py-2 text-[11px] font-black leading-tight transition-all sm:min-h-[48px] sm:px-3 sm:py-3 sm:text-sm ${activeTab === 'calculator' ? 'bg-[#7db9e8] text-[#252525] shadow-[2px_2px_0_rgba(52,52,52,.13)]' : 'text-slate-600 hover:bg-sky-50 hover:text-sky-800'}`}>
+        <nav aria-label="主要功能" className={`sticky top-3 z-30 grid ${appUser.role === 'admin' ? 'grid-cols-1' : 'grid-cols-3'} gap-1 rounded-2xl border-2 border-[#343434] bg-[#fffdf7]/95 p-1.5 shadow-[4px_5px_0_rgba(52,52,52,.12)] backdrop-blur-xl sm:gap-1.5`}>
+          {appUser.role !== 'admin' && <button onClick={() => setActiveTab('calculator')} aria-current={activeTab === 'calculator' ? 'page' : undefined} className={`min-h-[58px] min-w-0 whitespace-nowrap rounded-xl px-1 py-2 text-[11px] font-black leading-tight transition-all sm:min-h-[48px] sm:px-3 sm:py-3 sm:text-sm ${activeTab === 'calculator' ? 'bg-[#7db9e8] text-[#252525] shadow-[2px_2px_0_rgba(52,52,52,.13)]' : 'text-slate-600 hover:bg-sky-50 hover:text-sky-800'}`}>
             <span aria-hidden="true" className="mb-1 block text-sm sm:mb-0 sm:mr-1.5 sm:inline">✦</span>劑量計算
-          </button>
-          <button onClick={() => setActiveTab('schedule')} aria-current={activeTab === 'schedule' ? 'page' : undefined} className={`min-h-[58px] min-w-0 whitespace-nowrap rounded-xl px-1 py-2 text-[11px] font-black leading-tight transition-all sm:min-h-[48px] sm:px-3 sm:py-3 sm:text-sm ${activeTab === 'schedule' ? 'bg-[#f6d15f] text-[#252525] shadow-[2px_2px_0_rgba(52,52,52,.13)]' : 'text-slate-600 hover:bg-amber-50 hover:text-amber-800'}`}>
+          </button>}
+          {appUser.role !== 'admin' && <button onClick={() => setActiveTab('schedule')} aria-current={activeTab === 'schedule' ? 'page' : undefined} className={`min-h-[58px] min-w-0 whitespace-nowrap rounded-xl px-1 py-2 text-[11px] font-black leading-tight transition-all sm:min-h-[48px] sm:px-3 sm:py-3 sm:text-sm ${activeTab === 'schedule' ? 'bg-[#f6d15f] text-[#252525] shadow-[2px_2px_0_rgba(52,52,52,.13)]' : 'text-slate-600 hover:bg-amber-50 hover:text-amber-800'}`}>
             <span aria-hidden="true" className="mb-1 block text-sm sm:mb-0 sm:mr-1.5 sm:inline">▦</span>計畫表
-          </button>
+          </button>}
           {appUser.role !== 'admin' && (
             <button onClick={() => setActiveTab('log')} aria-current={activeTab === 'log' ? 'page' : undefined} className={`min-h-[58px] min-w-0 whitespace-nowrap rounded-xl px-1 py-2 text-[11px] font-black leading-tight transition-all sm:min-h-[48px] sm:px-3 sm:py-3 sm:text-sm ${activeTab === 'log' ? 'bg-[#86bf8c] text-[#252525] shadow-[2px_2px_0_rgba(52,52,52,.13)]' : 'text-slate-600 hover:bg-emerald-50 hover:text-emerald-800'}`}>
               <span aria-hidden="true" className="mb-1 block text-sm sm:mb-0 sm:mr-1.5 sm:inline">♡</span>健康紀錄
@@ -2601,8 +2729,8 @@ export default function MounjaroApp() {
         </nav>
 
         <main className="pb-8">
-          {activeTab === 'calculator' && <CalculatorView appUser={appUser} usersList={usersList} allLogs={allLogs} allSchedules={allSchedules} sharingPlans={sharingPlans} inventory={doseInventories.find(item => item.id === appUser.username || item.username === appUser.username)} />}
-          {activeTab === 'schedule' && (
+          {activeTab === 'calculator' && appUser.role !== 'admin' && <CalculatorView appUser={appUser} usersList={usersList} allLogs={allLogs} allSchedules={allSchedules} sharingPlans={sharingPlans} inventory={doseInventories.find(item => item.id === appUser.username || item.username === appUser.username)} />}
+          {activeTab === 'schedule' && appUser.role !== 'admin' && (
             <ScheduleView
               appUser={appUser}
               userSchedule={allSchedules.find(item => item.id === appUser.username || item.username === appUser.username)}
